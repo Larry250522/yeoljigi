@@ -295,6 +295,8 @@ textarea.input { height: 84px; padding: 12px 14px; resize: vertical; }
 .medpick .sw { width: 12px; height: 36px; border-radius: 6px; flex: none; }
 .medpick b { display: block; }
 .medpick small { color: var(--text-3); }
+.product-group { margin-bottom: 12px; }
+.product-group > small { display: block; font-weight: 800; margin: 0 0 6px 2px; }
 
 .whenpick { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .whenpick input { width: auto; flex: 1; min-width: 180px; }

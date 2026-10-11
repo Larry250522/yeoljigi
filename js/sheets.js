@@ -1,7 +1,7 @@
 // 기록 창 — 체온 · 해열제 · 증상 · 아이 · 내 약. 아래에서 올라오는 창 하나에 한 가지를 넣는다.
 
 import {
-  INGREDIENTS, URGENT_SYMPTOMS, ageMonths, ageNotice, checkDose, doseRange, feverLevel,
+  GROUPS, INGREDIENTS, PRODUCTS, URGENT_SYMPTOMS, ageMonths, ageNotice, checkDose, doseRange, feverLevel,
 } from './dose.js';
 import { doseMessage } from './report.js';
 import * as store from './store.js';
@@ -185,7 +185,8 @@ export function medSheet(child, entry = null, onSaved) {
     title: entry ? '해열제 기록 고치기' : `${child.name} 해열제`,
     body: `<div class="field"><span>어떤 약</span><div class="medpick" role="group" aria-label="약">
         ${meds.map((m) => medButton(m)).join('')}</div>
-        <div class="hint">약은 설정 → 내 약에서 더하거나 함량을 고칩니다. <b>포장에 적힌 성분 · 함량</b>과 같은지 확인하세요.
+        <div class="hint">약은 설정 → 내 약에서 더하거나(국내 제품 목록에서 고를 수 있어요) 함량을 고칩니다.
+          <b>포장에 적힌 성분 · 함량</b>과 같은지 확인하세요.
           이름이 같아도 성분이 다른 약이 있어요.</div></div>
       <div data-check aria-live="polite" style="margin:-4px 0 14px"></div>
       <div class="field"><span>먹인 양</span>
@@ -402,10 +403,24 @@ export function childSheet(child = null, { first = false } = {}) {
 }
 
 // ── 내 약 ──────────────────────────────────
+function productPicker() {
+  const mine = new Set(store.get().meds.map((m) => m.productId).filter(Boolean));
+  const unitText = (p) => (p.unit === 'mL' ? `${p.conc}mg/mL` : `1개 ${p.conc}mg`);
+  return `<div class="field"><span>제품에서 고르기</span>
+    ${Object.values(GROUPS).map((g) => `<div class="product-group"><small style="color:var(--${g.key === 'NSAID' ? 'nsaid' : 'apap'})">${esc(g.name)}</small>
+      <div class="medpick" role="group" aria-label="${esc(g.name)} 제품">
+      ${PRODUCTS.filter((p) => INGREDIENTS[p.ingredient].group === g.key).map((p) => `<button type="button" data-product="${esc(p.id)}"
+        aria-pressed="false"><span class="sw" style="background:var(--${g.key === 'NSAID' ? 'nsaid' : 'apap'})"></span>
+        <span><b>${esc(p.name)}${mine.has(p.id) ? ' <span class="faint">· 이미 있음</span>' : ''}</b>
+        <small>${esc(INGREDIENTS[p.ingredient].name)} · ${esc(unitText(p))}${p.note ? ` · ${esc(p.note)}` : ''}</small></span></button>`).join('')}
+      </div></div>`).join('')}
+    <div class="hint">목록에 없는 약은 아래에 직접 넣으세요. 골랐다면 <b>포장의 성분 · 함량</b>과 같은지 꼭 확인하세요.</div></div>`;
+}
+
 export function medPresetSheet(med = null) {
   const el = sheet({
     title: med ? '약 고치기' : '약 더하기',
-    body: `<label class="field"><span>이름</span><input class="input" name="name" maxlength="30" value="${esc(med?.name || '')}"
+    body: `${med ? '' : productPicker()}<label class="field"><span>이름</span><input class="input" name="name" maxlength="30" value="${esc(med?.name || '')}"
         placeholder="예: 집에 있는 해열제 시럽" ${med ? '' : 'autofocus'}></label>
       <label class="field"><span>성분</span><select class="input" name="ingredient">
         ${Object.values(INGREDIENTS).map((i) => `<option value="${i.id}" ${med?.ingredient === i.id ? 'selected' : ''}>${esc(i.name)}</option>`).join('')}
@@ -437,6 +452,20 @@ export function medPresetSheet(med = null) {
   $('[name=ingredient]', el).addEventListener('change', (e) => {
     if (!med && unit === 'mL') $('[name=conc]', el).value = INGREDIENTS[e.target.value].defaultConc;
   });
+  // 제품을 고르면 아래 칸을 채운다 — 고친 칸이 있으면 직접 넣은 약으로 본다
+  let productId = med?.productId || null;
+  $$('[data-product]', el).forEach((b) => b.addEventListener('click', () => {
+    const p = PRODUCTS.find((x) => x.id === b.dataset.product);
+    productId = p.id;
+    $$('[data-product]', el).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    $('[name=name]', el).value = p.name;
+    $('[name=ingredient]', el).value = p.ingredient;
+    $('[name=conc]', el).value = p.conc;
+    $('[name=maxPerDay]', el).value = p.maxPerDay ?? '';
+    unit = p.unit;
+    $$('[data-unit]', el).forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.unit === unit)));
+    label();
+  }));
   label();
   $('[data-save]', el).addEventListener('click', once(() => {
     const name = $('[name=name]', el).value.trim();
@@ -448,7 +477,11 @@ export function medPresetSheet(med = null) {
     if (maxPerDay !== null && !(Number.isInteger(maxPerDay) && maxPerDay >= 1 && maxPerDay <= 6)) {
       toast('하루 최대 횟수는 1~6 사이로 넣어 주세요.'); return false;
     }
-    store.saveMed({ ...(med || {}), name, ingredient: $('[name=ingredient]', el).value, conc, unit, maxPerDay });
+    const ingredient = $('[name=ingredient]', el).value;
+    const p = PRODUCTS.find((x) => x.id === productId);
+    // 제품 값과 다르게 고쳤으면 제품 표시를 떼어 「이미 있음」이 틀리지 않게
+    const same = p && p.ingredient === ingredient && p.conc === conc && p.unit === unit;
+    store.saveMed({ ...(med || {}), name, ingredient, conc, unit, maxPerDay, productId: same ? p.id : null });
     closeSheet();
     toast('저장했어요.');
   }));

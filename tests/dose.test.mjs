@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  HOUR, URINE_TAG, ageMonths, ageRow, alertsFor, careTip, checkDose, dailyLeft, dailyMaxMg, doseRange, feverEpisode, feverLevel, lastUrine,
+  HOUR, INGREDIENTS, PRODUCTS, URINE_TAG, ageMonths, ageRow, alertsFor, careTip, checkDose, dailyLeft, dailyMaxMg, doseRange, feverEpisode, feverLevel, lastUrine,
   nextDose, tempTrend,
 } from '../js/dose.js';
 
@@ -321,4 +321,27 @@ test('내 약마다 하루 횟수 — 좌약 「1일 2~3회」', () => {
   assert.notEqual(syrup.level, 'block');
   // 횟수를 적지 않은 약은 예전처럼
   assert.notEqual(checkDose({ ingredient: 'acetaminophen', mg: 125, at: new Date(at(15)), weightKg: 12, history, medId: 'sup' }).level, 'block');
+});
+
+test('제품 목록 — 성분 · 함량 · 같은 이름 다른 성분', () => {
+  const ids = new Set();
+  for (const p of PRODUCTS) {
+    assert.ok(INGREDIENTS[p.ingredient], p.name);
+    assert.ok(p.conc > 0 && ['mL', '개'].includes(p.unit), p.name);
+    assert.ok(!ids.has(p.id), `${p.id} 겹침`);
+    ids.add(p.id);
+  }
+  const by = (id) => PRODUCTS.find((p) => p.id === id);
+  // 이름이 같은 「챔프」 · 「콜대원키즈」는 계열이 다르다
+  assert.equal(INGREDIENTS[by('champ').ingredient].group, 'APAP');
+  assert.equal(INGREDIENTS[by('champ-ibu').ingredient].group, 'NSAID');
+  assert.equal(INGREDIENTS[by('coldaewon-pen').ingredient].group, 'APAP');
+  assert.equal(INGREDIENTS[by('coldaewon-ibu').ingredient].group, 'NSAID');
+  // 함량 — 160mg/5mL · 100mg/5mL · 60mg/5mL
+  assert.equal(by('tylenol-susp').conc, 32);
+  assert.equal(by('brufen').conc, 20);
+  assert.equal(by('maxibupen').conc, 12);
+  assert.equal(by('maxibupen').ingredient, 'dexibuprofen');
+  // 좌약은 허가 「1일 2~3회」
+  assert.equal(by('suspen-supp').maxPerDay, 3);
 });

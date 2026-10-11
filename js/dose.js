@@ -46,6 +46,24 @@ export const INGREDIENTS = {
   },
 };
 
+// 국내 어린이 해열제 제품 — 내 약을 더할 때 골라 함량을 잘못 넣지 않게. 성분 · 함량은 허가 원문 · 제품 안내에서 확인한 것만
+// (2026-10-11). 같은 이름에 다른 성분(챔프 · 챔프이부펜, 콜대원키즈펜 · 콜대원키즈이부펜)이 있어 고를 때 성분을 함께 보인다.
+// 출처: 어린이타이레놀현탁액 health.kr drug_cd=2022020400007 · 챔프 dpharm.co.kr/champ/info ·
+// 콜대원키즈 thepharmacy.co.kr · 어린이부루펜시럽 nedrug itemSeq=198601920 · 맥시부펜시럽 nedrug itemSeq=200608160 ·
+// 어린이용타이레놀정80mg nedrug itemSeq=199303109 · 복합써스펜좌약 hanmi.co.kr prodSeq=289(「1일 2 ~ 3회」)
+export const PRODUCTS = [
+  { id: 'tylenol-susp', name: '어린이타이레놀현탁액', ingredient: 'acetaminophen', conc: 32, unit: 'mL' },
+  { id: 'champ', name: '챔프시럽', ingredient: 'acetaminophen', conc: 32, unit: 'mL', note: '챔프이부펜시럽과 성분이 달라요' },
+  { id: 'coldaewon-pen', name: '콜대원키즈펜시럽', ingredient: 'acetaminophen', conc: 32, unit: 'mL',
+    note: '콜대원키즈이부펜 · 콜대원키즈콜드(감기약)와 성분이 달라요' },
+  { id: 'tylenol-80', name: '어린이용타이레놀정 80mg', ingredient: 'acetaminophen', conc: 80, unit: '개' },
+  { id: 'suspen-supp', name: '복합써스펜좌약 125mg', ingredient: 'acetaminophen', conc: 125, unit: '개', maxPerDay: 3 },
+  { id: 'brufen', name: '어린이부루펜시럽', ingredient: 'ibuprofen', conc: 20, unit: 'mL' },
+  { id: 'champ-ibu', name: '챔프이부펜시럽', ingredient: 'ibuprofen', conc: 20, unit: 'mL', note: '챔프시럽과 성분이 달라요' },
+  { id: 'coldaewon-ibu', name: '콜대원키즈이부펜시럽', ingredient: 'ibuprofen', conc: 20, unit: 'mL', note: '콜대원키즈펜과 성분이 달라요' },
+  { id: 'maxibupen', name: '맥시부펜시럽', ingredient: 'dexibuprofen', conc: 12, unit: 'mL', note: '이부프로펜 계열이에요' },
+];
+
 // 체온 구간 — 귀 · 겨드랑이 등 재는 곳마다 조금씩 다르지만, 집에서 보기 쉬운 한 가지 눈금을 쓴다.
 export const LEVELS = [
   { key: 'low', min: -Infinity, label: '낮음', tone: 'info' },
