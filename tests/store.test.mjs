@@ -118,3 +118,12 @@ test('아이 상태 — 1~5 만 남기고 요약에 함께', () => {
   const text = summary({ name: '하율' }, out.entries, new Date('2026-10-11T05:00:00Z'));
   assert.match(text, /38.4℃ \(힘들어함\)/);
 });
+
+test('내 약 하루 횟수 — 1~6 만 남긴다', () => {
+  const out = store.normalize({ children: [{ id: 'c1', name: '하율' }], meds: [
+    { id: 'a', name: '좌약', ingredient: 'acetaminophen', conc: 125, unit: '개', maxPerDay: 3 },
+    { id: 'b', name: '시럽', ingredient: 'acetaminophen', conc: 32, maxPerDay: 'x' },
+    { id: 'c', name: '시럽2', ingredient: 'ibuprofen', conc: 20, maxPerDay: 9 },
+  ] });
+  assert.deepEqual(out.meds.map((m) => m.maxPerDay), [3, null, null]);
+});

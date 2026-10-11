@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  HOUR, URINE_TAG, ageMonths, alertsFor, careTip, checkDose, dailyLeft, dailyMaxMg, doseRange, feverEpisode, feverLevel, lastUrine,
+  HOUR, URINE_TAG, ageMonths, ageRow, alertsFor, careTip, checkDose, dailyLeft, dailyMaxMg, doseRange, feverEpisode, feverLevel, lastUrine,
   nextDose, tempTrend,
 } from '../js/dose.js';
 
@@ -278,4 +278,47 @@ test('이부프로펜 계열 전에 — 수두 · 탈수 기록, 38℃ 아래 �
 test('체온 안내 — 처지면 해열제보다 진료', () => {
   assert.match(careTip(38.6), /처지거나 잘 깨지 않으면 해열제보다 진료가 먼저/);
   assert.doesNotMatch(careTip(38.6), /처지면 해열제를/);
+});
+
+test('이부프로펜 — 시럽 허가 나이별 용량표와 체중 계산 중 적은 쪽', () => {
+  // 1~2세(24개월) 12kg: 체중 1회 60~120mg · 하루 480mg → 표 1회 100mg · 하루 400mg
+  const r = doseRange('ibuprofen', 12, 20, 24);
+  assert.deepEqual(r.mg, [60, 100]);
+  assert.deepEqual(r.amount, [3, 5]);
+  assert.equal(r.ageCapped, true);
+  assert.equal(dailyMaxMg('ibuprofen', 12, 24), 400);
+  // 생년월일을 모르면 체중만(예전과 같다)
+  assert.deepEqual(doseRange('ibuprofen', 12, 20).mg, [60, 120]);
+  assert.equal(dailyMaxMg('ibuprofen', 12), 480);
+  // 11~14세 35kg: 체중 1회 175~350mg → 표 250mg, 하루 1200 → 1000
+  assert.deepEqual(doseRange('ibuprofen', 35, 20, 150).mg, [175, 250]);
+  assert.equal(dailyMaxMg('ibuprofen', 35, 150), 1000);
+  // 3~6세 15kg: 체중 하루 500mg(30kg 미만 상한) < 표 600 — 적은 쪽
+  assert.equal(dailyMaxMg('ibuprofen', 15, 60), 500);
+  // 표 밖 — 돌 전(체중만), 만 15세부터(체중만)
+  assert.equal(ageRow('ibuprofen', 8), null);
+  assert.equal(ageRow('ibuprofen', 180), null);
+  // 덱시부프로펜 · 아세트아미노펜에는 나이별 표를 쓰지 않는다
+  assert.deepEqual(doseRange('dexibuprofen', 12, 12, 24).mg, doseRange('dexibuprofen', 12, 12).mg);
+  // 1회 최대 확인도 나이를 본다
+  const over = checkDose({ ingredient: 'ibuprofen', mg: 120, at: new Date(at(0)), weightKg: 12, months: 24 });
+  assert.equal(over.level, 'block');
+  assert.match(over.messages.map((m) => m.text).join(' '), /나이별 용량표/);
+  // 하루 최대량(400mg)으로 다음 때를 센다 — 100mg 넷이면 다섯째는 막히고, 셋이면 하루 양 75%
+  assert.equal(dailyLeft('NSAID', [med('ibuprofen', 100, 0), med('ibuprofen', 100, 6), med('ibuprofen', 100, 12)],
+    new Date(at(13)), 12, null, 24).used, 0.75);
+});
+
+test('내 약마다 하루 횟수 — 좌약 「1일 2~3회」', () => {
+  const sup = (h) => ({ ...med('acetaminophen', 125, h), medId: 'sup' });
+  const history = [sup(0), sup(5), sup(10)];
+  const fourth = checkDose({ ingredient: 'acetaminophen', mg: 125, at: new Date(at(15)), weightKg: 12, history,
+    medId: 'sup', medMaxPerDay: 3 });
+  assert.equal(fourth.level, 'block');
+  assert.match(fourth.messages.map((m) => m.text).join(' '), /이 약은 하루 3번까지/);
+  // 같은 계열의 다른 약(시럽)은 성분 하루 5번으로 센다
+  const syrup = checkDose({ ingredient: 'acetaminophen', mg: 160, at: new Date(at(15)), weightKg: 12, history, medId: 'syr' });
+  assert.notEqual(syrup.level, 'block');
+  // 횟수를 적지 않은 약은 예전처럼
+  assert.notEqual(checkDose({ ingredient: 'acetaminophen', mg: 125, at: new Date(at(15)), weightKg: 12, history, medId: 'sup' }).level, 'block');
 });

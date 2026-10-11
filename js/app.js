@@ -1,7 +1,7 @@
 // 열지기 — 화면 넷(홈 · 기록 · 용량 · 설정)과 처음 쓰는 사람 맞이.
 
 import {
-  GROUPS, HOUR, INGREDIENTS, URINE_TAG, ageLabel, ageMonths, ageNotice, alertsFor, careTip, dailyLeft, dailyMaxMg, doseRange,
+  GROUPS, HOUR, INGREDIENTS, URINE_TAG, ageLabel, ageRow, ageMonths, ageNotice, alertsFor, careTip, dailyLeft, dailyMaxMg, doseRange,
   feverEpisode, feverLevel, lastUrine, nextDose, tempTrend,
 } from './dose.js';
 import { chartImage, tempChart } from './chart.js';
@@ -102,7 +102,8 @@ function homeView() {
       <div class="muted small">아래 「체온」을 눌러 처음 잰 체온을 남겨 주세요.</div></div></div>`;
   }
 
-  const nexts = Object.fromEntries(Object.values(GROUPS).map((g) => [g.key, nextDose(g.key, history, now, Number(child.weight) || 0)]));
+  const nexts = Object.fromEntries(Object.values(GROUPS)
+    .map((g) => [g.key, nextDose(g.key, history, now, Number(child.weight) || 0, months)]));
   const doseCards = Object.values(GROUPS).map((g) => {
     const n = nexts[g.key];
     // 다른 계열을 먹인 지 얼마 안 됐으면 — 번갈아 먹이기는 계속 힘들어할 때만(NICE 1.6.6)
@@ -113,7 +114,7 @@ function homeView() {
     const lastMed = n.last && store.get().meds.find((m) => m.id === n.last.medId);
     const med = lastMed || (n.last && n.last.conc ? n.last : null)
       || store.get().meds.find((m) => INGREDIENTS[m.ingredient].group === g.key);
-    const left = dailyLeft(g.key, history, now, Number(child.weight) || 0, med);
+    const left = dailyLeft(g.key, history, now, Number(child.weight) || 0, med, months);
     let state;
     let when;
     if (n.canNow) {
@@ -226,7 +227,7 @@ function logView() {
 function calcOutput(med, weight, months) {
   if (!med || !(Number(weight) > 0)) return '<p class="muted" style="text-align:center;margin:8px 0">몸무게를 넣어 주세요.</p>';
   const ing = INGREDIENTS[med.ingredient];
-  const r = doseRange(med.ingredient, Number(weight), med.conc);
+  const r = doseRange(med.ingredient, Number(weight), med.conc, months);
   if (!r) return '<p class="muted" style="text-align:center;margin:8px 0">몸무게를 확인해 주세요.</p>';
   if (r.unitTooBig) {
     return `<div class="check warn">이 약은 체중 ${esc(weight)}kg 아이에게 한 ${esc(med.unit)}가 너무 커요(1회 ${r.mg[0]}~${r.mg[1]}mg).
@@ -235,11 +236,15 @@ function calcOutput(med, weight, months) {
   const notice = ageNotice(med.ingredient, months);
   return `<div class="calc-out"><div class="muted small">${esc(med.name)} · 1회</div>
       <div class="big num">${fmtAmount(r.amount[0])}~${fmtAmount(r.amount[1])}<small>${esc(med.unit)}</small></div>
-      <div class="muted small">${ing.name} ${r.mg[0]}~${r.mg[1]}mg${r.capped ? ' · 어른 1회 최대량까지' : ''}</div></div>
+      <div class="muted small">${ing.name} ${r.mg[0]}~${r.mg[1]}mg${r.ageCapped ? ' · 나이별 용량표까지'
+        : r.capped ? ' · 어른 1회 최대량까지' : ''}</div></div>
     ${notice ? `<div class="check warn">${esc(notice)}</div>` : ''}
     <dl class="kv"><dt>1회 양</dt><dd>체중 1kg 에 ${ing.mgPerKg[0]}~${ing.mgPerKg[1]}mg</dd>
       <dt>간격</dt><dd>같은 계열 ${ing.minIntervalH}시간 이상 · 다른 계열과 2시간 이상</dd>
-      <dt>하루</dt><dd>24시간에 ${ing.maxPerDay}번까지 · 최대 ${Math.round(dailyMaxMg(med.ingredient, Number(weight)))}mg</dd>
+      <dt>하루</dt><dd>24시간에 ${med.maxPerDay && med.maxPerDay < ing.maxPerDay ? `이 약은 ${med.maxPerDay}번(같은 계열 ${ing.maxPerDay}번)`
+        : `${ing.maxPerDay}번`}까지 · 최대 ${Math.round(dailyMaxMg(med.ingredient, Number(weight), months))}mg</dd>
+      ${ing.ageTable ? `<dt>나이별 표</dt><dd>${months === null ? '생년월일을 넣으면 포장의 나이별 용량표와 견줘 적은 쪽을 보여 드려요'
+        : ageRow(med.ingredient, months) ? '포장의 나이별 용량표와 체중 계산 중 적은 쪽' : '포장 용량표 밖의 나이 — 체중으로만 셈'}</dd>` : ''}
       <dt>먹이는 나이</dt><dd>보통 생후 ${ing.minAgeMonths}개월부터</dd></dl>`;
 }
 
@@ -374,8 +379,9 @@ function helpDose() {
     <p>홈의 「다음 해열제」는 기록한 약으로 계열마다 언제부터 먹일 수 있는지 셉니다(같은 계열 간격 · 다른 계열 2시간 ·
       24시간 횟수). 기록하지 않은 약은 셀 수 없어요.</p>
     <p class="faint small">숫자는 국내 어린이 해열제 포장 설명서의 일반 범위예요. 안내는 NICE 지침 · 미국소아과학회 보고서(2011) ·
-      코크란 검토(2013)를 바탕으로 했어요. 이부프로펜 시럽은 제품에 따라 포장의 용량표가 1세부터일 수 있고, 좌약은 하루 횟수가
-      시럽보다 적을 수 있어요. 제품 설명서와 의사 · 약사의 지시가 먼저입니다.</p></div>` });
+      코크란 검토(2013)를 바탕으로 했어요. 이부프로펜은 생년월일을 넣으면 포장의 나이별 용량표(1~2세 · 3~6세 · 7~10세 · 11~14세)와
+      체중 계산 중 적은 쪽으로 셉니다(포장 표는 1세부터일 수 있어요). 좌약은 하루 횟수가 시럽보다 적은 경우가 많아 설정 → 내 약에
+      「하루 최대 횟수」를 넣어 두세요. 제품 설명서와 의사 · 약사의 지시가 먼저입니다.</p></div>` });
 }
 
 // 열 공포를 줄이는 짧은 글 — 부모가 가장 많이 찾는 것은 경고 신호와 「열이란」(Gwiasda 2026 Digit Health),

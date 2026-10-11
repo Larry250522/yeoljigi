@@ -66,7 +66,7 @@ export function doseMessage(child, entry, history, now = new Date()) {
   if (temp && now - new Date(temp.at) < 12 * HOUR) lines.push(`마지막 체온 ${fmt1(temp.temp)}℃ (${stamp(temp.at)})`);
   lines.push('', '다음에 먹일 수 있는 때');
   for (const g of Object.values(GROUPS)) {
-    const n = nextDose(g.key, history, now, Number(child.weight) || 0);
+    const n = nextDose(g.key, history, now, Number(child.weight) || 0, ageMonths(child.birth, now));
     lines.push(`- ${g.name}: ${n.canNow ? '지금 가능' : `${stamp(n.at)}부터 (${n.reason})`}`);
   }
   const pee = lastUrine(history, now);

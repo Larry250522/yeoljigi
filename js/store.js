@@ -85,8 +85,9 @@ function cleanMed(m) {
   if (!m || typeof m !== 'object' || !m.id || !INGREDIENTS[m.ingredient]) return null;
   const conc = num(m.conc);
   if (!(conc > 0)) return null;
+  const max = num(m.maxPerDay);
   return { ...m, id: str(m.id, 60), name: str(m.name, 30) || INGREDIENTS[m.ingredient].name, conc,
-    unit: m.unit === '개' ? '개' : 'mL' };
+    unit: m.unit === '개' ? '개' : 'mL', maxPerDay: Number.isInteger(max) && max >= 1 && max <= 6 ? max : null };
 }
 
 /** 기록 하나 — 화면이 그리다 멈추지 않게 칸마다 본다. 고칠 수 없으면 버린다. */

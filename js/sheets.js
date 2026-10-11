@@ -208,7 +208,7 @@ export function medSheet(child, entry = null, onSaved) {
 
   const stepOf = () => (med.unit === 'mL' ? 0.5 : 0.5);
   const recommend = () => {
-    const r = doseRange(med.ingredient, child.weight, med.conc);
+    const r = doseRange(med.ingredient, child.weight, med.conc, months);
     if (!r) return med.unit === 'mL' ? 5 : 1;
     // 범위 안의 가운데쯤, 0.5 단위로 내림 — 범위 아래로는 내려가지 않게
     const mid = Math.floor(((r.amount[0] + r.amount[1]) / 2) * 2) / 2;
@@ -226,7 +226,7 @@ export function medSheet(child, entry = null, onSaved) {
     $('[data-unit]', el).textContent = med.unit;
     const mg = Math.round(amount * med.conc);
     $('[data-mg]', el).textContent = `${INGREDIENTS[med.ingredient].name} ${mg}mg (${med.unit === 'mL' ? `${med.conc}mg/mL` : `1개 ${med.conc}mg`})`;
-    const r = doseRange(med.ingredient, child.weight, med.conc);
+    const r = doseRange(med.ingredient, child.weight, med.conc, months);
     $('[data-range]', el).innerHTML = r && r.unitTooBig
       ? `이 약은 체중 ${esc(child.weight)}kg 아이에게 한 ${esc(med.unit)}가 너무 커요. 시럽이나 함량이 낮은 약을 쓰고, 의사 · 약사와 상의하세요.`
       : r
@@ -239,7 +239,10 @@ export function medSheet(child, entry = null, onSaved) {
 
     const at = fromLocalInput($('[name=at]', el).value);
     const history = store.entriesOf(child.id).filter((e) => e.id !== entry?.id);
-    const res = checkDose({ ingredient: med.ingredient, mg, at, weightKg: Number(child.weight) || 0, history, months });
+    // 하루 횟수는 지금 내 약 설정에서(옛 기록을 고칠 때도 같은 약이면)
+    const preset = meds.find((m) => m.id === med.id);
+    const res = checkDose({ ingredient: med.ingredient, mg, at, weightKg: Number(child.weight) || 0, history, months,
+      medId: med.id, medMaxPerDay: preset?.maxPerDay || null });
     $('[data-check]', el).innerHTML = res.messages.length
       ? `<div class="check ${res.level}">${res.messages.map((m) => `<p>${esc(m.text)}</p>`).join('')}</div>`
       : '<div class="check ok">간격 · 양 모두 괜찮아요.</div>';
@@ -413,7 +416,11 @@ export function medPresetSheet(med = null) {
       <label class="field"><span data-conc-label>함량</span><input class="input num" type="number" name="conc" inputmode="decimal" step="0.1"
         min="0.1" value="${esc(med?.conc ?? 32)}">
         <div class="hint">포장 · 설명서에 적힌 대로. 시럽은 「1mL 에 몇 mg」(예: 160mg/5mL → 32), 좌약 · 알약은 「1개에 몇 mg」.
-          아세트아미노펜이 든 종합감기약도 여기 더하면 함께 셉니다.</div></label>`,
+          아세트아미노펜이 든 종합감기약도 여기 더하면 함께 셉니다.</div></label>
+      <label class="field"><span>하루 최대 횟수 (선택)</span><input class="input num" type="number" name="maxPerDay" inputmode="numeric"
+        step="1" min="1" max="6" value="${esc(med?.maxPerDay ?? '')}" placeholder="포장에 적힌 하루 횟수">
+        <div class="hint">포장에 「1일 2~3회」처럼 적혀 있으면 큰 수(3)를 넣으세요. 좌약은 시럽보다 적은 경우가 많아요.
+          비워 두면 성분의 하루 횟수만 셉니다.</div></label>`,
     footer: `${med ? `<button class="btn danger" data-del aria-label="이 약 지우기">${icon('trash', 20)}</button>` : ''}
       <button class="btn primary" data-save>저장</button>`,
   });
@@ -423,6 +430,9 @@ export function medPresetSheet(med = null) {
     unit = b.dataset.unit;
     $$('[data-unit]', el).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     label();
+    // 새로 더하는 좌약 · 알약은 하루 3번으로 시작(복합써스펜좌약 허가 「1일 2~3회」) — 포장을 보고 고친다
+    const max = $('[name=maxPerDay]', el);
+    if (!med && unit === '개' && !max.value) max.value = 3;
   }));
   $('[name=ingredient]', el).addEventListener('change', (e) => {
     if (!med && unit === 'mL') $('[name=conc]', el).value = INGREDIENTS[e.target.value].defaultConc;
@@ -433,7 +443,12 @@ export function medPresetSheet(med = null) {
     const conc = Number($('[name=conc]', el).value);
     if (!name) { toast('이름을 넣어 주세요.'); return false; }
     if (!(conc > 0 && conc <= 1000)) { toast('함량을 확인해 주세요.'); return false; }
-    store.saveMed({ ...(med || {}), name, ingredient: $('[name=ingredient]', el).value, conc, unit });
+    const maxRaw = $('[name=maxPerDay]', el).value;
+    const maxPerDay = maxRaw === '' ? null : Number(maxRaw);
+    if (maxPerDay !== null && !(Number.isInteger(maxPerDay) && maxPerDay >= 1 && maxPerDay <= 6)) {
+      toast('하루 최대 횟수는 1~6 사이로 넣어 주세요.'); return false;
+    }
+    store.saveMed({ ...(med || {}), name, ingredient: $('[name=ingredient]', el).value, conc, unit, maxPerDay });
     closeSheet();
     toast('저장했어요.');
   }));

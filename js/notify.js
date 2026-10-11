@@ -3,7 +3,7 @@
 // 웹은 앱을 닫아 두면 정해진 시각에 알림을 띄우는 방법이 없다(예약 알림 API 가 표준이 아니다). 그래서 화면이 열려 있거나
 // 뒤에 남아 있는 동안만 울린다고 화면에 그대로 적는다. 다시 열면 홈의 「다음 해열제」가 지금 상태를 보여 준다.
 
-import { GROUPS, HOUR, nextDose } from './dose.js';
+import { GROUPS, HOUR, ageMonths, nextDose } from './dose.js';
 import * as store from './store.js';
 import { clock, toast } from './ui.js';
 
@@ -49,7 +49,7 @@ export function reschedule() {
   for (const child of children) {
     const history = store.entriesOf(child.id);
     for (const g of Object.values(GROUPS)) {
-      const n = nextDose(g.key, history, now, Number(child.weight) || 0);
+      const n = nextDose(g.key, history, now, Number(child.weight) || 0, ageMonths(child.birth, now));
       if (n.last && !n.canNow && now - new Date(n.last.at) < 24 * HOUR) {
         plan(n.at, `dose-${child.id}-${g.key}`, `${child.name} · ${g.short}`, `${clock(n.at)}부터 다시 먹일 수 있어요. 자고 있으면 깨우지 않아도 돼요.`);
       }
