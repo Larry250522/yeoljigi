@@ -110,10 +110,11 @@ function homeView() {
     const otherLast = Object.values(nexts).find((x) => x.group !== g.key).last;
     const alt = n.canNow && otherLast && now - new Date(otherLast.at) < 6 * HOUR;
     const color = g.key === 'NSAID' ? 'var(--nsaid)' : 'var(--apap)';
-    // 남은 양은 그 계열에서 마지막에 먹인 약(없으면 내 약 중 그 계열 첫 번째)의 단위로
+    // 남은 양은 그 계열에서 마지막에 먹인 약(없으면 내 약 중 그 계열 첫 번째)의 단위로 — 종합감기약 단위로는 세지 않는다
+    const solo = (m) => m && !m.combo;
     const lastMed = n.last && store.get().meds.find((m) => m.id === n.last.medId);
-    const med = lastMed || (n.last && n.last.conc ? n.last : null)
-      || store.get().meds.find((m) => INGREDIENTS[m.ingredient].group === g.key);
+    const med = (solo(lastMed) && lastMed) || (n.last && n.last.conc && solo(n.last) ? n.last : null)
+      || store.get().meds.find((m) => INGREDIENTS[m.ingredient].group === g.key && solo(m));
     const left = dailyLeft(g.key, history, now, Number(child.weight) || 0, med, months);
     let state;
     let when;
@@ -233,6 +234,10 @@ function calcOutput(med, weight, months) {
     return `<div class="check warn">이 약은 체중 ${esc(weight)}kg 아이에게 한 ${esc(med.unit)}가 너무 커요(1회 ${r.mg[0]}~${r.mg[1]}mg).
       시럽이나 함량이 낮은 약을 쓰고, 의사 · 약사와 상의하세요.</div>`;
   }
+  if (med.combo) {
+    return `<div class="check info">${esc(med.name)}은(는) 종합감기약이에요. 양은 <b>포장의 나이별 표</b>대로 먹이세요.
+      먹였다면 해열제로 기록해 두면 든 ${esc(ing.name)}을 해열제 간격 · 하루 최대량에 함께 셉니다.</div>`;
+  }
   const notice = ageNotice(med.ingredient, months);
   return `<div class="calc-out"><div class="muted small">${esc(med.name)} · 1회</div>
       <div class="big num">${fmtAmount(r.amount[0])}~${fmtAmount(r.amount[1])}<small>${esc(med.unit)}</small></div>
@@ -276,7 +281,8 @@ function calcView() {
     <section class="card prose" aria-label="주의"><h2>꼭 확인하세요</h2>
       <ul><li><b>포장의 함량</b>이 위 약의 함량과 같은지 보세요. 같은 성분도 제품마다 다를 수 있어요(설정 → 내 약에서 고침).</li>
         <li><b>이름이 같아도 성분이 다른 약</b>이 있어요(예: 챔프시럽은 아세트아미노펜, 챔프이부펜시럽은 이부프로펜). 포장의 <b>성분명</b>을 보세요.</li>
-        <li><b>종합감기약</b>에도 아세트아미노펜이 든 것이 많아요. 같이 먹였다면 설정 → 내 약에 그 약을 아세트아미노펜으로 더해 함께 세세요.</li>
+        <li><b>종합감기약</b>(챔프콜드펜 · 콜대원키즈콜드에스 등)에도 아세트아미노펜이 들어 있어요. 같이 먹였다면 설정 → 내 약에서
+          그 약을 골라 더하고 해열제로 기록하세요 — 해열제 간격 · 하루 최대량에 함께 셉니다.</li>
         <li>현탁액(시럽)은 먹이기 전에 잘 흔드세요.</li>
         <li>포장 설명서의 <b>나이 · 체중별 용량표</b>와 의사 · 약사의 지시가 이 계산보다 먼저입니다.</li>
         <li>시럽은 계량컵보다 <b>눈금 있는 먹이는 주사기</b>로 재세요 — 잘못 재는 일이 훨씬 적어요.</li>

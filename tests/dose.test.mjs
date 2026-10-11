@@ -345,3 +345,32 @@ test('제품 목록 — 성분 · 함량 · 같은 이름 다른 성분', () => 
   // 좌약은 허가 「1일 2~3회」
   assert.equal(by('suspen-supp').maxPerDay, 3);
 });
+
+test('종합감기약 — 든 아세트아미노펜은 세고, 「권장량보다 적다」는 말하지 않는다', () => {
+  const cold = checkDose({ ingredient: 'acetaminophen', mg: 60, at: new Date(at(5)), weightKg: 13, combo: true,
+    history: [med('acetaminophen', 160, 3)] });
+  assert.doesNotMatch(cold.messages.map((m) => m.text).join(' '), /권장량/);
+  assert.equal(cold.level, 'block', '같은 계열 4시간 간격은 그대로');
+  const syrup = checkDose({ ingredient: 'acetaminophen', mg: 60, at: new Date(at(5)), weightKg: 13 });
+  assert.match(syrup.messages.map((m) => m.text).join(' '), /권장량/);
+});
+
+test('제품 목록 — 원문으로 더한 제품 · 종합감기약', () => {
+  const by = (id) => PRODUCTS.find((p) => p.id === id);
+  assert.equal(by('setopen').conc, 32);                 // 「100mL 중 아세트아미노펜 3200 밀리그램」
+  assert.equal(by('kidsnpen').ingredient, 'ibuprofen');
+  assert.equal(by('anypen').ingredient, 'dexibuprofen');
+  assert.equal(by('anypen').conc, 12);
+  assert.equal(by('champ-cold').conc, 14);              // 「1포(5 밀리리터) 중 아세트아미노펜 70 밀리그램」
+  assert.equal(by('champ-cold-hi').conc, 15);           // 「1포(10 밀리리터) 중 … 150 밀리그램」
+  assert.equal(by('coldaewon-cold-s').maxPerDay, 3);   // 「1일 3회 식후 30분」
+  for (const p of PRODUCTS.filter((x) => x.combo)) {
+    assert.equal(p.ingredient, 'acetaminophen', p.name);
+    assert.equal(p.minAgeMonths, 24, `${p.name} 만 2세부터`);
+  }
+  assert.equal(PRODUCTS.some((p) => p.name.includes('콜대원키즈콜드시럽')), false, '허가 만료');
+  // 만 2세 전 아이에게 종합감기약 — 막지 않고 알린다
+  const r = checkDose({ ingredient: 'acetaminophen', mg: 70, at: new Date(at(0)), weightKg: 11, months: 18, combo: true, medMinAgeMonths: 24 });
+  assert.equal(r.level, 'warn');
+  assert.match(r.messages.map((m) => m.text).join(' '), /만 2세부터/);
+});

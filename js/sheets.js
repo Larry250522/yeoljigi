@@ -209,6 +209,7 @@ export function medSheet(child, entry = null, onSaved) {
 
   const stepOf = () => (med.unit === 'mL' ? 0.5 : 0.5);
   const recommend = () => {
+    if (med.combo) return 0;                    // 종합감기약 — 포장 표대로 직접 넣는다
     const r = doseRange(med.ingredient, child.weight, med.conc, months);
     if (!r) return med.unit === 'mL' ? 5 : 1;
     // 범위 안의 가운데쯤, 0.5 단위로 내림 — 범위 아래로는 내려가지 않게
@@ -228,7 +229,10 @@ export function medSheet(child, entry = null, onSaved) {
     const mg = Math.round(amount * med.conc);
     $('[data-mg]', el).textContent = `${INGREDIENTS[med.ingredient].name} ${mg}mg (${med.unit === 'mL' ? `${med.conc}mg/mL` : `1개 ${med.conc}mg`})`;
     const r = doseRange(med.ingredient, child.weight, med.conc, months);
-    $('[data-range]', el).innerHTML = r && r.unitTooBig
+    $('[data-range]', el).innerHTML = med.combo
+      ? `<b>종합감기약</b>은 포장의 나이별 표대로 먹이세요. 앱은 든 ${esc(INGREDIENTS[med.ingredient].name)}만 세어 해열제 간격 · 하루
+         최대량에 넣어요. 다른 성분(코 · 기침약)의 하루 횟수는 포장을 따르세요.`
+      : r && r.unitTooBig
       ? `이 약은 체중 ${esc(child.weight)}kg 아이에게 한 ${esc(med.unit)}가 너무 커요. 시럽이나 함량이 낮은 약을 쓰고, 의사 · 약사와 상의하세요.`
       : r
       ? `체중 ${esc(child.weight)}kg 권장 <b class="num">${fmtAmount(r.amount[0])}~${fmtAmount(r.amount[1])}${esc(med.unit)}</b>
@@ -243,7 +247,8 @@ export function medSheet(child, entry = null, onSaved) {
     // 하루 횟수는 지금 내 약 설정에서(옛 기록을 고칠 때도 같은 약이면)
     const preset = meds.find((m) => m.id === med.id);
     const res = checkDose({ ingredient: med.ingredient, mg, at, weightKg: Number(child.weight) || 0, history, months,
-      medId: med.id, medMaxPerDay: preset?.maxPerDay || null });
+      medId: med.id, medMaxPerDay: preset?.maxPerDay || null, combo: Boolean(med.combo),
+      medMinAgeMonths: preset?.minAgeMonths || null });
     $('[data-check]', el).innerHTML = res.messages.length
       ? `<div class="check ${res.level}">${res.messages.map((m) => `<p>${esc(m.text)}</p>`).join('')}</div>`
       : '<div class="check ok">간격 · 양 모두 괜찮아요.</div>';
@@ -285,7 +290,7 @@ export function medSheet(child, entry = null, onSaved) {
     if (!when) return false;
     const saved = {
       ...(entry || {}), childId: child.id, type: 'med', medId: med.id, name: med.name, ingredient: med.ingredient,
-      conc: med.conc, unit: med.unit, amount, mg: Math.round(amount * med.conc),
+      conc: med.conc, unit: med.unit, amount, mg: Math.round(amount * med.conc), combo: Boolean(med.combo),
       at: when.toISOString(), memo: $('[name=memo]', el).value.trim(),
     };
     store.saveEntry(saved);
@@ -300,7 +305,8 @@ export function medSheet(child, entry = null, onSaved) {
 }
 
 function snapshotMed(entry) {
-  return { id: entry.medId || 'gone', name: entry.name || '약', ingredient: entry.ingredient, conc: entry.conc, unit: entry.unit || 'mL' };
+  return { id: entry.medId || 'gone', name: entry.name || '약', ingredient: entry.ingredient, conc: entry.conc, unit: entry.unit || 'mL',
+    combo: Boolean(entry.combo) };
 }
 
 function medButton(m) {
@@ -308,7 +314,7 @@ function medButton(m) {
   const color = ing.group === 'NSAID' ? 'var(--nsaid)' : 'var(--apap)';
   return `<button type="button" data-med="${esc(m.id)}" aria-pressed="false">
     <span class="sw" style="background:${color}"></span>
-    <span><b>${esc(m.name)}</b><small>${esc(ing.name)} · ${m.unit === 'mL' ? `${esc(m.conc)}mg/mL` : `1개 ${esc(m.conc)}mg`}</small></span>
+    <span><b>${esc(m.name)}</b><small>${m.combo ? '종합감기약 · ' : ''}${esc(ing.name)} · ${m.unit === 'mL' ? `${esc(m.conc)}mg/mL` : `1개 ${esc(m.conc)}mg`}</small></span>
   </button>`;
 }
 
@@ -432,6 +438,9 @@ export function medPresetSheet(med = null) {
         min="0.1" value="${esc(med?.conc ?? 32)}">
         <div class="hint">포장 · 설명서에 적힌 대로. 시럽은 「1mL 에 몇 mg」(예: 160mg/5mL → 32), 좌약 · 알약은 「1개에 몇 mg」.
           아세트아미노펜이 든 종합감기약도 여기 더하면 함께 셉니다.</div></label>
+      <label class="list" style="box-shadow:none;border:1px solid var(--line);margin-bottom:14px"><span class="item">
+        <span class="grow"><b>종합감기약이에요</b><small>코 · 기침약 같은 다른 성분도 든 약 — 양은 포장 표대로, 앱은 해열 성분만 셉니다.</small></span>
+        <input type="checkbox" class="switch" name="combo" ${med?.combo ? 'checked' : ''}></span></label>
       <label class="field"><span>하루 최대 횟수 (선택)</span><input class="input num" type="number" name="maxPerDay" inputmode="numeric"
         step="1" min="1" max="6" value="${esc(med?.maxPerDay ?? '')}" placeholder="포장에 적힌 하루 횟수">
         <div class="hint">포장에 「1일 2~3회」처럼 적혀 있으면 큰 수(3)를 넣으세요. 좌약은 시럽보다 적은 경우가 많아요.
@@ -462,6 +471,7 @@ export function medPresetSheet(med = null) {
     $('[name=ingredient]', el).value = p.ingredient;
     $('[name=conc]', el).value = p.conc;
     $('[name=maxPerDay]', el).value = p.maxPerDay ?? '';
+    $('[name=combo]', el).checked = Boolean(p.combo);
     unit = p.unit;
     $$('[data-unit]', el).forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.unit === unit)));
     label();
@@ -481,7 +491,8 @@ export function medPresetSheet(med = null) {
     const p = PRODUCTS.find((x) => x.id === productId);
     // 제품 값과 다르게 고쳤으면 제품 표시를 떼어 「이미 있음」이 틀리지 않게
     const same = p && p.ingredient === ingredient && p.conc === conc && p.unit === unit;
-    store.saveMed({ ...(med || {}), name, ingredient, conc, unit, maxPerDay, productId: same ? p.id : null });
+    store.saveMed({ ...(med || {}), name, ingredient, conc, unit, maxPerDay, combo: $('[name=combo]', el).checked,
+      productId: same ? p.id : null, minAgeMonths: same ? p.minAgeMonths ?? null : med?.minAgeMonths ?? null });
     closeSheet();
     toast('저장했어요.');
   }));

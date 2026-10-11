@@ -87,7 +87,8 @@ function cleanMed(m) {
   if (!(conc > 0)) return null;
   const max = num(m.maxPerDay);
   return { ...m, id: str(m.id, 60), name: str(m.name, 30) || INGREDIENTS[m.ingredient].name, conc,
-    unit: m.unit === '개' ? '개' : 'mL', maxPerDay: Number.isInteger(max) && max >= 1 && max <= 6 ? max : null };
+    unit: m.unit === '개' ? '개' : 'mL', maxPerDay: Number.isInteger(max) && max >= 1 && max <= 6 ? max : null,
+    combo: Boolean(m.combo), minAgeMonths: Number.isInteger(num(m.minAgeMonths)) && num(m.minAgeMonths) > 0 ? num(m.minAgeMonths) : null };
 }
 
 /** 기록 하나 — 화면이 그리다 멈추지 않게 칸마다 본다. 고칠 수 없으면 버린다. */
@@ -105,7 +106,8 @@ function cleanEntry(e) {
     const amount = num(e.amount);
     const mg = num(e.mg);
     if (!INGREDIENTS[e.ingredient] || !(amount > 0) || !(mg >= 0)) return null;
-    return { ...base, amount, mg, conc: num(e.conc), unit: e.unit === '개' ? '개' : 'mL', name: str(e.name, 30) };
+    return { ...base, amount, mg, conc: num(e.conc), unit: e.unit === '개' ? '개' : 'mL', name: str(e.name, 30),
+      combo: Boolean(e.combo) };
   }
   if (e.type === 'symptom') {
     return { ...base, tags: Array.isArray(e.tags) ? e.tags.map((t) => str(t, 30)).filter(Boolean) : [] };

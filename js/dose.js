@@ -24,8 +24,9 @@ export const INGREDIENTS = {
   ibuprofen: {
     id: 'ibuprofen', name: '이부프로펜', group: 'NSAID',
     mgPerKg: [5, 10], minIntervalH: 6, maxPerDay: 4, maxMgPerKgDay: 40, maxSingleMg: 400, maxMgDay: 1200,
-    // 30kg 미만 소아 하루 500mg — 시럽 허가 원문 「체중이 30kg미만인 어린이는 1일량이 500mg(25ml)을 초과해서는 안되며」
-    // (라미돈시럽 · 챔프이부펜 · 콜대원키즈이부펜, 2026-10 대조. 어린이부루펜시럽 원문에는 이 문장이 없다 — 더 보수적인 쪽으로 둔다)
+    // 30kg 미만 소아 하루 500mg — 라미돈시럽(199301642, 2018 취하) 허가 「체중이 30kg미만인 어린이는 1일량이 500mg(25ml)을
+    // 초과해서는 안되며」. 지금 허가된 시럽(부루펜 · 챔프이부펜 · 콜대원키즈이부펜 · 키즈앤펜)은 이 문장 대신 아래 나이별 표를 쓴다.
+    // 빼면 느슨해지는 쪽이라(3~6세 600mg 등) 더 보수적인 상한으로 남겨 둔다(2026-10-11 nedrug 대조)
     childDayCap: { underKg: 30, mg: 500 },
     // 시럽 허가 용량표(어린이부루펜시럽 nedrug 198601920 등 — 나이별 1회 · 1일 최대). 체중 계산과 둘 중 적은 쪽을 쓴다.
     // 표 밖(돌 전 · 만 15세부터)이거나 생년월일을 모르면 체중 계산만
@@ -46,22 +47,38 @@ export const INGREDIENTS = {
   },
 };
 
-// 국내 어린이 해열제 제품 — 내 약을 더할 때 골라 함량을 잘못 넣지 않게. 성분 · 함량은 허가 원문 · 제품 안내에서 확인한 것만
-// (2026-10-11). 같은 이름에 다른 성분(챔프 · 챔프이부펜, 콜대원키즈펜 · 콜대원키즈이부펜)이 있어 고를 때 성분을 함께 보인다.
-// 출처: 어린이타이레놀현탁액 health.kr drug_cd=2022020400007 · 챔프 dpharm.co.kr/champ/info ·
-// 콜대원키즈 thepharmacy.co.kr · 어린이부루펜시럽 nedrug itemSeq=198601920 · 맥시부펜시럽 nedrug itemSeq=200608160 ·
-// 어린이용타이레놀정80mg nedrug itemSeq=199303109 · 복합써스펜좌약 hanmi.co.kr prodSeq=289(「1일 2 ~ 3회」)
+// 국내 어린이 해열제 제품 — 내 약을 더할 때 골라 함량을 잘못 넣지 않게. 성분 · 함량 · 용법은 허가 원문에서 확인한 것만
+// (2026-10-11, 의약품안전나라 nedrug.mfds.go.kr/pbp/CCBBB01/getItemDetail?itemSeq=… — 괄호 안 번호, 허가 「정상」인 것).
+// 같은 이름에 다른 성분(챔프 · 챔프이부펜 · 챔프콜드펜, 콜대원키즈펜 · 콜대원키즈이부펜 · 콜대원키즈콜드에스)이 있어 성분을 함께 보인다.
+// 어린이타이레놀현탁액 health.kr drug_cd=2022020400007 · 세토펜(199800888) 「100mL 중 아세트아미노펜 3200 밀리그램」 ·
+// 챔프(201206715) · 콜대원키즈펜(201702784) · 써스펜키즈(202501821) 같은 32mg/mL · 어린이용타이레놀정80mg(199303109) ·
+// 복합써스펜좌약(199102142) 「1좌제 중 아세트아미노펜 125 밀리그램 … 1일 2 ～ 3회」 — 아세트아미노펜 좌약은 이것 하나뿐 ·
+// 이부프로펜 20mg/mL: 어린이부루펜(198601920) · 챔프이부펜(201604402) · 콜대원키즈이부펜(198901310) · 키즈앤펜(201500197) ·
+// 덱시부프로펜 「100mL 중 1.2 그램」: 맥시부펜(200608160) · 애니펜(201000953) ·
+// 종합감기약(아세트아미노펜만 센다, 만 2세부터): 챔프콜드펜(202303142) 「1포(5 밀리리터) 중 아세트아미노펜 70 밀리그램」
+// 「1일 3회, 식후 30분 및 필요 시 취침시에 … 복용간격을 4시간」 · 챔프콜드펜하이(202401275) 「1포(10 밀리리터) 중 … 150 밀리그램」 ·
+// 콜대원키즈콜드에스(202501659) 「1포(10 밀리리터) 중 … 150 밀리그램」 「1일 3회 식후 30분」. 콜대원키즈콜드시럽은 허가 만료(2025-11-10)라 뺐다.
 export const PRODUCTS = [
   { id: 'tylenol-susp', name: '어린이타이레놀현탁액', ingredient: 'acetaminophen', conc: 32, unit: 'mL' },
   { id: 'champ', name: '챔프시럽', ingredient: 'acetaminophen', conc: 32, unit: 'mL', note: '챔프이부펜시럽과 성분이 달라요' },
   { id: 'coldaewon-pen', name: '콜대원키즈펜시럽', ingredient: 'acetaminophen', conc: 32, unit: 'mL',
     note: '콜대원키즈이부펜 · 콜대원키즈콜드(감기약)와 성분이 달라요' },
+  { id: 'setopen', name: '세토펜현탁액', ingredient: 'acetaminophen', conc: 32, unit: 'mL' },
+  { id: 'suspen-kids', name: '써스펜키즈시럽', ingredient: 'acetaminophen', conc: 32, unit: 'mL', note: '복합써스펜좌약과 다른 시럽이에요' },
   { id: 'tylenol-80', name: '어린이용타이레놀정 80mg', ingredient: 'acetaminophen', conc: 80, unit: '개' },
   { id: 'suspen-supp', name: '복합써스펜좌약 125mg', ingredient: 'acetaminophen', conc: 125, unit: '개', maxPerDay: 3 },
   { id: 'brufen', name: '어린이부루펜시럽', ingredient: 'ibuprofen', conc: 20, unit: 'mL' },
   { id: 'champ-ibu', name: '챔프이부펜시럽', ingredient: 'ibuprofen', conc: 20, unit: 'mL', note: '챔프시럽과 성분이 달라요' },
   { id: 'coldaewon-ibu', name: '콜대원키즈이부펜시럽', ingredient: 'ibuprofen', conc: 20, unit: 'mL', note: '콜대원키즈펜과 성분이 달라요' },
+  { id: 'kidsnpen', name: '키즈앤펜시럽', ingredient: 'ibuprofen', conc: 20, unit: 'mL' },
   { id: 'maxibupen', name: '맥시부펜시럽', ingredient: 'dexibuprofen', conc: 12, unit: 'mL', note: '이부프로펜 계열이에요' },
+  { id: 'anypen', name: '애니펜시럽', ingredient: 'dexibuprofen', conc: 12, unit: 'mL', note: '이부프로펜 계열이에요' },
+  { id: 'champ-cold', name: '챔프콜드펜시럽', ingredient: 'acetaminophen', conc: 14, unit: 'mL', combo: true, maxPerDay: 4,
+    minAgeMonths: 24, note: '종합감기약 · 1포 5mL' },
+  { id: 'champ-cold-hi', name: '챔프콜드펜하이시럽', ingredient: 'acetaminophen', conc: 15, unit: 'mL', combo: true, maxPerDay: 4,
+    minAgeMonths: 24, note: '종합감기약 · 1포 10mL' },
+  { id: 'coldaewon-cold-s', name: '콜대원키즈콜드에스시럽', ingredient: 'acetaminophen', conc: 15, unit: 'mL', combo: true, maxPerDay: 3,
+    minAgeMonths: 24, note: '종합감기약 · 1포 10mL' },
 ];
 
 // 체온 구간 — 귀 · 겨드랑이 등 재는 곳마다 조금씩 다르지만, 집에서 보기 쉬운 한 가지 눈금을 쓴다.
@@ -212,7 +229,10 @@ export function careTip(temp) {
  * 이 약을 이 시각에 먹여도 되는지.
  * level: ok | info | warn | block. messages: 화면에 그대로 보일 말.
  */
-export function checkDose({ ingredient, mg, at = new Date(), weightKg, history = [], months = null, medId = null, medMaxPerDay = null }) {
+export function checkDose({
+  ingredient, mg, at = new Date(), weightKg, history = [], months = null, medId = null, medMaxPerDay = null, combo = false,
+  medMinAgeMonths = null,
+}) {
   const ing = INGREDIENTS[ingredient];
   const out = { level: 'ok', messages: [] };
   const raise = (level, text) => {
@@ -226,6 +246,11 @@ export function checkDose({ ingredient, mg, at = new Date(), weightKg, history =
 
   const age = ageNotice(ingredient, months);
   if (age) raise('warn', age);
+  // 제품마다 먹이는 나이가 다르다(종합감기약은 만 2세부터)
+  if (medMinAgeMonths && months !== null && months !== undefined && months < medMinAgeMonths) {
+    const from = medMinAgeMonths >= 24 ? `만 ${Math.floor(medMinAgeMonths / 12)}세` : `생후 ${medMinAgeMonths}개월`;
+    raise('warn', `이 약은 포장에 ${from}부터라고 적혀 있어요. 먹이기 전에 의사 · 약사와 상의하세요.`);
+  }
 
   // 38℃ 아래에서 먹이는 일이 흔하다(열나요 사용자 자료: Park 2021 JMIR mHealth) — 막지 않고 한 줄만
   const lastTemp = history.filter((e) => e.type === 'temp' && ms(e.at) <= when && ms(e.at) > when - 2 * HOUR)
@@ -252,7 +277,8 @@ export function checkDose({ ingredient, mg, at = new Date(), weightKg, history =
     const limit = Math.min(range.mg[1] * 1.05, ing.maxSingleMg);
     const basis = range.ageCapped ? `체중 ${weightKg}kg · 나이별 용량표 기준` : `체중 ${weightKg}kg 기준`;
     if (dose > limit) raise('block', `1회 최대 ${range.mg[1]}mg(${basis})을 넘습니다.`);
-    else if (dose < range.mg[0] * 0.8) raise('info', `권장량(${range.mg[0]}~${range.mg[1]}mg)보다 적습니다.`);
+    // 종합감기약은 포장의 나이별 표대로 먹인다 — 든 아세트아미노펜이 해열제 1회 양보다 적은 것이 보통이라 알리지 않는다
+    else if (!combo && dose < range.mg[0] * 0.8) raise('info', `권장량(${range.mg[0]}~${range.mg[1]}mg)보다 적습니다.`);
   } else if (!(weightKg > 0)) {
     raise('info', '체중을 넣으면 용량을 확인해 드려요.');
   }
