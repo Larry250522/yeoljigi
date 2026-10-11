@@ -79,6 +79,8 @@ const P = {
   upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5M12 3v12"/>',
   trash: '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>',
   copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  drop: '<path d="M12 2.7s-6.5 6.9-6.5 11.6a6.5 6.5 0 0 0 13 0C18.5 9.6 12 2.7 12 2.7z"/>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>',
   external: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>',
 };
 
@@ -145,6 +147,30 @@ export function toast(text, action) {
   if (action) el.querySelector('button').addEventListener('click', () => { action.run(); el.remove(); });
   document.body.append(el);
   toastTimer = setTimeout(() => el.remove(), action ? 5000 : 2600);
+}
+
+/** 글을 공유 시트로 보낸다. 공유 시트가 없으면(카카오톡 안 브라우저 · PC) 복사해 둔다. */
+export async function shareText(text) {
+  if (navigator.share) {
+    try { await navigator.share({ text }); return; } catch (err) { if (err && err.name === 'AbortError') return; }
+  }
+  try { await navigator.clipboard.writeText(text); toast('복사했어요. 카카오톡 대화방에 붙여 넣으세요.'); } catch {
+    toast('보내지 못했어요. 진료용 요약에서 복사해 주세요.');
+  }
+}
+
+/** 파일을 공유 시트로, 안 되면 내려받기로. */
+export async function shareFile(file) {
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); return; } catch (err) { if (err && err.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file);
+  a.download = file.name;
+  document.body.append(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  toast('그림을 저장했어요.');
 }
 
 export function confirmSheet({ title, text, ok = '확인', danger = false }) {

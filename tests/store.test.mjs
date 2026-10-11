@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as store from '../js/store.js';
-import { summary } from '../js/report.js';
+import { doseMessage, summary } from '../js/report.js';
 
 function memory() {
   const m = new Map();
@@ -80,4 +80,31 @@ test('저장소를 읽기만 해도 예외가 나는 브라우저 — 멈추지 
   const state = store.load(blocked);
   assert.equal(state.children.length, 0);
   assert.equal(store.isPersistent(), false);
+});
+
+test('가족에게 보낼 글 — 먹인 약과 계열마다 다음 때', () => {
+  const now = new Date('2026-10-11T14:00:00+09:00');
+  const iso = (h) => new Date(now.getTime() - h * 3600_000).toISOString();
+  const given = { type: 'med', name: '아세트아미노펜 시럽', ingredient: 'acetaminophen', amount: 6, unit: 'mL', mg: 192, at: iso(0) };
+  const history = [given, { type: 'temp', temp: 39.1, at: iso(0.2) }, { type: 'symptom', tags: ['소변 봄'], at: iso(1) }];
+  const text = doseMessage({ name: '하율', weight: 13 }, given, history, now);
+  assert.match(text, /\[하율\] 10\/11 오후 2:00 아세트아미노펜 시럽 6mL 먹였어요 \(아세트아미노펜 192mg\)/);
+  assert.match(text, /마지막 체온 39.1℃/);
+  assert.match(text, /아세트아미노펜 계열: 10\/11 오후 6:00부터 \(4시간 간격\)/);
+  assert.match(text, /이부프로펜 계열: 10\/11 오후 4:00부터 \(다른 계열과 2시간\)/);
+  assert.match(text, /마지막 소변 10\/11 오후 1:00/);
+  assert.match(text, /오후 2:00 기록 기준/);
+});
+
+test('진료용 요약 — 소변은 증상 목록 대신 한 줄로', () => {
+  const now = new Date('2026-10-11T14:00:00+09:00');
+  const iso = (h) => new Date(now.getTime() - h * 3600_000).toISOString();
+  const text = summary({ name: '하율' }, [
+    { type: 'symptom', tags: ['소변 봄'], at: iso(5) },
+    { type: 'symptom', tags: ['소변 봄'], at: iso(2) },
+    { type: 'symptom', tags: ['구토'], at: iso(1) },
+  ], now);
+  assert.match(text, /소변 2번 · 마지막 10\/11 오후 12:00/);
+  assert.doesNotMatch(text, /- .*소변 봄/);
+  assert.match(text, /- .*구토/);
 });

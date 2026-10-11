@@ -2,7 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  HOUR, ageMonths, alertsFor, careTip, checkDose, dailyLeft, dailyMaxMg, doseRange, feverEpisode, feverLevel, nextDose,
+  HOUR, URINE_TAG, ageMonths, alertsFor, careTip, checkDose, dailyLeft, dailyMaxMg, doseRange, feverEpisode, feverLevel, lastUrine,
+  nextDose, tempTrend,
 } from '../js/dose.js';
 
 const T0 = new Date('2026-10-11T09:00:00+09:00');
@@ -212,4 +213,32 @@ test('체온 한 줄 안내', () => {
   assert.match(careTip(38.5), /1시간쯤 뒤/);
   assert.match(careTip(37.6), /1~2시간/);
   assert.equal(careTip('x'), '');
+});
+
+test('체온 추세 — 앞 체온과 견주고 24시간 최고를 고른다', () => {
+  const now = new Date(at(6));
+  const t = tempTrend([temp(39.4, 1), temp(38.6, 3), temp(38.0, 5)], now);
+  assert.equal(t.last.temp, 38.0);
+  assert.equal(t.prev.temp, 38.6);
+  assert.equal(t.diff, -0.6);
+  assert.equal(t.max.temp, 39.4);
+  // 앞 체온이 24시간 넘게 지난 것이면 견주지 않는다
+  const far = tempTrend([temp(39, -30), temp(37.2, 5)], now);
+  assert.equal(far.prev, null);
+  assert.equal(far.diff, null);
+  assert.equal(tempTrend([], now), null);
+  assert.equal(tempTrend([temp(38, 8)], now), null, '앞으로의 기록은 보지 않는다');
+});
+
+test('소변 — 열이 나는 동안 기록이 8시간 넘게 비면 짚는다', () => {
+  const pee = (h) => ({ type: 'symptom', tags: [URINE_TAG], at: at(h) });
+  const child = { birth: '2023-01-01' };
+  const history = [temp(38.8, 0), pee(0), temp(38.5, 9)];
+  assert.equal(lastUrine(history, new Date(at(9))).at, at(0));
+  const has = (h, list = history) => alertsFor(child, list, new Date(at(h))).some((a) => a.title.startsWith('소변'));
+  assert.equal(has(7), false, '8시간 전에는 조용히');
+  assert.equal(has(9), true);
+  assert.equal(has(9, [temp(36.8, 0), pee(0), temp(36.9, 9)]), false, '열이 없으면 짚지 않는다');
+  assert.equal(has(9, [temp(38.8, 0), temp(38.5, 9)]), false, '소변을 기록해 오지 않은 아이는 짚지 않는다');
+  assert.equal(has(25, [temp(38.8, 0), pee(0), temp(38.5, 24)]), false, '기록을 그만둔 지 하루가 넘으면 짚지 않는다');
 });

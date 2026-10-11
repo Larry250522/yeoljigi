@@ -150,11 +150,12 @@ button { cursor: pointer; }
 .empty-now svg { flex: none; }
 
 /* 빠른 기록 */
-.quick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
 .quick button {
   border: 0; border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow);
-  padding: 16px 8px 14px; display: flex; flex-direction: column; align-items: center; gap: 8px; font-weight: 800; font-size: 15px;
+  padding: 14px 4px 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-weight: 800; font-size: 15px;
 }
+.quick button small { font-size: 11px; font-weight: 600; margin-top: -4px; }
 .quick button .ico { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; }
 .quick button .ico svg { width: 24px; height: 24px; }
 .quick button:active { transform: scale(.97); }

@@ -300,6 +300,33 @@ function fmtGap(hours) {
 // 병원에 가야 할 신호로 보는 증상
 export const URGENT_SYMPTOMS = ['경련', '숨쉬기 힘듦', '축 처짐', '소변 줄어듦', '누르면 안 없어지는 발진'];
 
+// 소변(기저귀 포함) — 홈에서 한 번 눌러 남긴다. 열이 나는 동안 이만큼 기록이 비면 짚어 준다(도움말 「6~8시간 없음」과 맞춘다).
+export const URINE_TAG = '소변 봄';
+export const URINE_GAP_H = 8;
+
+/** 마지막 소변 기록(지금까지). 없으면 null. */
+export function lastUrine(history, now = new Date()) {
+  const nowMs = ms(now);
+  return history.filter((e) => e.type === 'symptom' && (e.tags || []).includes(URINE_TAG) && ms(e.at) <= nowMs)
+    .sort((a, b) => ms(b.at) - ms(a.at))[0] || null;
+}
+
+/**
+ * 마지막 체온이 바로 앞 체온보다 얼마나 바뀌었나 · 24시간 최고.
+ * 앞 체온이 24시간 넘게 지난 것이면 견주지 않는다(다른 열일 수 있다).
+ */
+export function tempTrend(history, now = new Date()) {
+  const nowMs = ms(now);
+  const temps = history.filter((e) => e.type === 'temp' && Number.isFinite(Number(e.temp)) && ms(e.at) <= nowMs)
+    .sort((a, b) => ms(b.at) - ms(a.at));
+  if (!temps.length) return null;
+  const [last, prev] = temps;
+  const day = temps.filter((e) => ms(e.at) > nowMs - DAY);
+  const max = day.reduce((m, e) => (m && Number(m.temp) >= Number(e.temp) ? m : e), null);
+  const near = prev && ms(last.at) - ms(prev.at) <= DAY;
+  return { last, max, prev: near ? prev : null, diff: near ? round1(Number(last.temp) - Number(prev.temp)) : null };
+}
+
 /** 이번 열이 시작된 때 — 열(38℃ 이상)과 열 사이가 24시간 넘게 비면 새로 센다. */
 export function feverEpisode(history, now = new Date()) {
   const temps = history.filter((e) => e.type === 'temp' && Number.isFinite(Number(e.temp)) && ms(e.at) <= ms(now))
@@ -338,6 +365,13 @@ export function alertsFor(child, history, now = new Date()) {
   const ep = feverEpisode(history, now);
   if (ep && ep.hours >= 72) {
     out.push({ level: 'warn', title: '열이 3일 넘게 이어짐', body: '열이 72시간 넘게 이어지면 진료를 받아 원인을 확인하세요.' });
+  }
+  const pee = lastUrine(history, now);
+  const peeGapH = pee ? (nowMs - ms(pee.at)) / HOUR : 0;
+  // 소변을 기록해 온 아이가 열이 나는 동안만 — 기록을 그만둔 지 오래면(24시간) 짚지 않는다
+  if (pee && ep && peeGapH >= URINE_GAP_H && peeGapH < 24) {
+    out.push({ level: 'warn', title: `소변 기록이 ${Math.floor(peeGapH)}시간째 없음`,
+      body: '소변을 봤다면 「소변」을 눌러 남겨 주세요. 정말 8시간 넘게 보지 않았거나 입이 마르고 울어도 눈물이 없으면 바로 진료를 받으세요.' });
   }
   if (temps[0] && Number(temps[0].temp) < 35.5) {
     out.push({ level: 'warn', title: '체온이 낮음', body: '다시 재 보고, 그래도 35.5℃ 아래면 진료를 받으세요.' });

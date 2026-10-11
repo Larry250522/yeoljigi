@@ -1,10 +1,10 @@
 // 열지기 — 화면 넷(홈 · 기록 · 용량 · 설정)과 처음 쓰는 사람 맞이.
 
 import {
-  GROUPS, HOUR, INGREDIENTS, ageLabel, ageMonths, ageNotice, alertsFor, careTip, dailyLeft, dailyMaxMg, doseRange, feverEpisode,
-  feverLevel, nextDose,
+  GROUPS, HOUR, INGREDIENTS, URINE_TAG, ageLabel, ageMonths, ageNotice, alertsFor, careTip, dailyLeft, dailyMaxMg, doseRange,
+  feverEpisode, feverLevel, lastUrine, nextDose, tempTrend,
 } from './dose.js';
-import { tempChart } from './chart.js';
+import { chartImage, tempChart } from './chart.js';
 import * as notify from './notify.js';
 import { summary } from './report.js';
 import {
@@ -12,7 +12,7 @@ import {
 } from './sheets.js';
 import * as store from './store.js';
 import {
-  $, $$, ago, clock, confirmSheet, dayLabel, esc, fmt1, fmtAmount, icon, sheet, toast, until,
+  $, $$, ago, clock, confirmSheet, dayLabel, esc, fmt1, fmtAmount, icon, shareFile, sheet, toast, until,
 } from './ui.js';
 import * as env from './env.js';
 
@@ -79,11 +79,18 @@ function homeView() {
   let nowCard;
   if (lastTemp) {
     const lv = feverLevel(lastTemp.temp);
+    const trend = tempTrend(history, now);
+    // 해열제를 먹인 뒤 떨어지는지 · 오르는지 — 앞 체온과 견준 값, 그리고 24시간 최고(마지막 것과 다를 때)
+    const change = trend && trend.prev ? `${ago(trend.prev.at, now)} ${fmt1(trend.prev.temp)}℃보다 ${
+      Math.abs(trend.diff) < 0.05 ? '그대로' : `${trend.diff > 0 ? '▲' : '▼'} ${fmt1(Math.abs(trend.diff))}℃`}` : '';
+    const peak = trend && trend.max && trend.max !== lastTemp ? `24시간 최고 ${fmt1(trend.max.temp)}℃` : '';
     nowCard = `<div class="now">
         <div class="temp num tone-${lv.tone}">${fmt1(lastTemp.temp)}<small>℃</small></div>
         <div class="meta"><span class="badge bg-${lv.tone}">${esc(lv.label)}</span>
           <div class="muted small" style="margin-top:6px">${esc(ago(lastTemp.at, now))} · ${esc(clock(lastTemp.at))}${lastTemp.site ? ` · ${esc(lastTemp.site)}` : ''}</div>
         </div></div>
+      ${change || peak ? `<p class="small" style="margin:10px 0 0;color:var(--text-2)">${esc(change)}${change && peak
+        ? '<span class="faint"> · </span>' : ''}${peak ? `<span class="faint">${esc(peak)}</span>` : ''}</p>` : ''}
       ${ep ? `<p class="small muted" style="margin:12px 0 0">이번 열은 ${esc(dayLabel(ep.start, now).replace(/^.* · /, ''))} ${esc(clock(ep.start))}부터 —
         <b>${Math.max(1, Math.round(ep.hours))}시간째</b></p>` : ''}
       <p class="tip">${esc(careTip(lastTemp.temp))}</p>`;
@@ -124,6 +131,7 @@ function homeView() {
   const notice = months !== null && months < 3
     ? `<p class="small" style="margin:10px 0 0;color:var(--high)">${esc(ageNotice('acetaminophen', months))}</p>` : '';
 
+  const pee = lastUrine(history, now);
   const recent = history.slice(0, 5);
   const inner = `${banners()}${kidsBar(child)}${alertHtml}
     <section class="card" aria-label="지금 체온"><h2>${esc(child.name)} 지금<span class="spacer"></span>
@@ -132,6 +140,8 @@ function homeView() {
       <button type="button" data-new="temp"><span class="ico bg-fever">${icon('therm')}</span>체온</button>
       <button type="button" data-new="med"><span class="ico" style="background:var(--brand-soft);color:var(--brand)">${icon('syrup')}</span>해열제</button>
       <button type="button" data-new="symptom"><span class="ico bg-info">${icon('note')}</span>증상</button>
+      <button type="button" data-pee><span class="ico bg-mild">${icon('drop')}</span>소변${pee
+        ? `<small class="faint">${esc(ago(pee.at, now))}</small>` : ''}</button>
     </div>
     <section class="card" aria-label="다음 해열제"><h2>다음 해열제<span class="spacer"></span>
       <button class="link" data-help-dose>간격 안내</button></h2>
@@ -356,7 +366,19 @@ async function shareSummary() {
     body: `<p class="muted small" style="margin:0 0 10px">최근 72시간 기록이에요. 병원에서 보여 주거나 가족에게 보내세요.</p>
       <textarea class="input" readonly style="height:260px;font-size:14px" aria-label="요약">${esc(text)}</textarea>`,
     footer: `<button class="btn" data-copy>${icon('copy', 20)} 복사</button>
+      <button class="btn" data-png>${icon('image', 20)} 그래프</button>
       ${navigator.share ? `<button class="btn primary" data-send>${icon('share', 20)} 보내기</button>` : ''}`,
+  });
+  // 그래프 그림 — 의사에게 휴대폰 화면 대신 보여 주거나 가족에게 보낼 때
+  $('[data-png]', el).addEventListener('click', async () => {
+    try {
+      const blob = await chartImage(store.entriesOf(child.id), { hours: 72, title: `${child.name} 체온 · 해열제` });
+      const d = new Date();
+      await shareFile(new File([blob], `열지기-${child.name}-${d.getMonth() + 1}월${d.getDate()}일.png`, { type: 'image/png' }));
+    } catch (err) {
+      console.error(err);
+      toast('그림을 만들지 못했어요.');
+    }
   });
   $('[data-copy]', el).addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(text); toast('복사했어요.'); } catch {
@@ -433,7 +455,14 @@ root.addEventListener('click', async (ev) => {
   else if (d.kid) { store.setActive(d.kid); }
   else if ('addKid' in d) childSheet(null, { first: !store.get().children.length });
   else if ('editKid' in d) childSheet(d.editKid ? store.get().children.find((c) => c.id === d.editKid) : store.activeChild());
-  else if (d.new) {
+  else if ('pee' in d) {
+    withChild((child) => {
+      // 밤에 한 번 눌러 바로 — 잘못 눌렀으면 되돌리기
+      const id = store.uid();
+      store.saveEntry({ id, childId: child.id, type: 'symptom', tags: [URINE_TAG], memo: '', at: new Date().toISOString() });
+      toast('소변 기록했어요.', { label: '되돌리기', run: () => store.removeEntry(id) });
+    });
+  } else if (d.new) {
     withChild((child) => {
       if (d.new === 'temp') tempSheet(child);
       else if (d.new === 'med') {

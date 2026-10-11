@@ -16,7 +16,15 @@ const BANDS = [
   { from: 40, to: 41, tone: 'severe' },
 ];
 
-export function tempChart(entries, { hours = 24, now = new Date() } = {}) {
+export function tempChart(entries, opts = {}) {
+  return `${chartSvg(entries, opts)}${LEGEND}`;
+}
+
+const LEGEND = `<div class="legend"><span><i style="background:var(--apap)"></i>아세트아미노펜</span>
+    <span><i style="background:var(--nsaid)"></i>이부프로펜 계열</span>
+    <span><i style="background:var(--fever-soft);outline:1px solid var(--fever)"></i>38℃ 이상</span></div>`;
+
+function chartSvg(entries, { hours = 24, now = new Date() } = {}) {
   const end = now.getTime() + hours * HOUR * 0.04;
   const start = now.getTime() - hours * HOUR;
   const x = (t) => PAD.l + ((t - start) / (end - start)) * (W - PAD.l - PAD.r);
@@ -78,8 +86,58 @@ export function tempChart(entries, { hours = 24, now = new Date() } = {}) {
     ${bands}${grid}${ticks.join('')}
     <line class="nowline" x1="${nowX}" x2="${nowX}" y1="${PAD.t}" y2="${H - PAD.b}"/>
     ${medMarks}${line}${dots}${empty}
-  </svg>
-  <div class="legend"><span><i style="background:var(--apap)"></i>아세트아미노펜</span>
-    <span><i style="background:var(--nsaid)"></i>이부프로펜 계열</span>
-    <span><i style="background:var(--fever-soft);outline:1px solid var(--fever)"></i>38℃ 이상</span></div>`;
+  </svg>`;
+}
+
+// 그림으로 내보낼 때 — 화면 CSS 가 닿지 않으니 그래프 모양(app.css 의 .chart 규칙)을 SVG 안에 함께 넣는다
+const CHART_STYLE = `.band{opacity:.55}.grid{stroke:var(--line);stroke-width:1}
+  .axis{fill:var(--text-3);font-size:10px;font-family:-apple-system,'Apple SD Gothic Neo','Noto Sans KR',sans-serif}
+  .line{fill:none;stroke:var(--text);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+  .pt{stroke:var(--surface);stroke-width:2}.nowline{stroke:var(--brand);stroke-width:1.5;stroke-dasharray:3 3}.medmark{stroke-width:2}
+  .t{fill:var(--text);font-size:13px;font-weight:700;font-family:-apple-system,'Apple SD Gothic Neo','Noto Sans KR',sans-serif}
+  .s{fill:var(--text-2);font-size:10px;font-family:-apple-system,'Apple SD Gothic Neo','Noto Sans KR',sans-serif}`;
+
+/**
+ * 진료 때 보여 줄 그래프 그림(PNG). 늘 밝은 색으로 — 화면 토큰(app.css)을 밝은 테마에서 읽어 바꿔 넣는다.
+ * 브라우저에서만 부른다.
+ */
+export async function chartImage(entries, { hours = 72, now = new Date(), title = '' } = {}) {
+  const rootEl = document.documentElement;
+  const before = rootEl.getAttribute('data-theme');
+  rootEl.setAttribute('data-theme', 'light');
+  const css = getComputedStyle(rootEl);
+  const color = (name) => css.getPropertyValue(`--${name}`).trim() || '#888';
+  const paint = (text) => text.replace(/var\(--([a-z0-9-]+)\)/g, (m, name) => color(name));
+  const style = paint(CHART_STYLE);
+  const chart = paint(chartSvg(entries, { hours, now })).replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+  const bg = color('surface');
+  const legend = [['apap', '아세트아미노펜'], ['nsaid', '이부프로펜 계열']]
+    .map(([k, label], i) => `<rect x="${12 + i * 110}" y="268" width="10" height="10" rx="3" fill="${color(k)}"/>
+      <text class="s" x="${26 + i * 110}" y="277">${esc(label)}</text>`).join('');
+  if (before === null) rootEl.removeAttribute('data-theme'); else rootEl.setAttribute('data-theme', before);
+
+  const w = 340;
+  const h = 290;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+    <style>${style}</style><rect width="${w}" height="${h}" fill="${bg}"/>
+    <text class="t" x="12" y="24">${esc(title)}</text>
+    <text class="s" x="12" y="42">${esc(stamp(now.getTime() - hours * HOUR))} ~ ${esc(stamp(now))} · 최근 ${hours}시간 · 열지기</text>
+    <g transform="translate(0 56)">${chart}</g>${legend}</svg>`;
+
+  const img = new Image();
+  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  await img.decode();
+  const scale = 3;
+  const canvas = document.createElement('canvas');
+  canvas.width = w * scale;
+  canvas.height = h * scale;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(scale, scale);
+  ctx.drawImage(img, 0, 0, w, h);
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('그림을 만들지 못했어요.'))), 'image/png'));
+}
+
+function stamp(at) {
+  const d = new Date(at);
+  return `${d.getMonth() + 1}/${d.getDate()} ${clock(d)}`;
 }

@@ -3,7 +3,7 @@
 // 한 덩어리 JSON 을 localStorage 에 둔다(기록이 수천 건이어도 수백 KB). 저장할 수 없는 환경(사생활 보호 창 ·
 // 꽉 찬 저장 공간)이면 화면에 알리고 메모리로만 돈다. 백업은 JSON 파일로 내보내고 다시 가져온다.
 
-import { INGREDIENTS } from './dose.js';
+import { INGREDIENTS, URINE_TAG } from './dose.js';
 
 const KEY = 'yeoljigi.v1';
 export const SCHEMA = 1;
@@ -23,8 +23,8 @@ export const SYMPTOMS = [
   '잘 못 잠', '보챔', '경련', '숨쉬기 힘듦', '축 처짐', '소변 줄어듦', '누르면 안 없어지는 발진',
 ];
 
-// 열의 까닭을 짐작하는 데 쓰는 일 — 예방접종 뒤 1~2일은 열이 날 수 있다(접종열)
-export const EVENTS = ['예방접종 맞음', '병원 다녀옴', '어린이집 · 유치원 쉼'];
+// 그 밖의 일 — 소변(홈에서 한 번 누르기와 같은 표), 열의 까닭을 짐작하는 일(예방접종 뒤 1~2일은 열이 날 수 있다)
+export const EVENTS = [URINE_TAG, '예방접종 맞음', '병원 다녀옴', '어린이집 · 유치원 쉼'];
 
 function blank() {
   return { schema: SCHEMA, children: [], meds: DEFAULT_MEDS.map((m) => ({ ...m })), entries: [],

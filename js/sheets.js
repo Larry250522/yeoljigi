@@ -3,9 +3,10 @@
 import {
   INGREDIENTS, URGENT_SYMPTOMS, ageMonths, ageNotice, checkDose, doseRange, feverLevel,
 } from './dose.js';
+import { doseMessage } from './report.js';
 import * as store from './store.js';
 import {
-  $, $$, closeSheet, confirmSheet, esc, fmt1, fmtAmount, fromLocalInput, icon, sheet, toLocalInput, toast,
+  $, $$, closeSheet, confirmSheet, esc, fmt1, fmtAmount, fromLocalInput, icon, shareText, sheet, toLocalInput, toast,
 } from './ui.js';
 
 const URGENT = new Set(URGENT_SYMPTOMS);
@@ -263,7 +264,11 @@ export function medSheet(child, entry = null, onSaved) {
     };
     store.saveEntry(saved);
     closeSheet();
-    toast(`${med.name} ${fmtAmount(amount)}${med.unit} 기록했어요.`);
+    // 다른 보호자가 같은 약을 또 먹이지 않게 — 기록 바로 뒤 한 번 눌러 카카오톡 등으로 보낸다
+    toast(`${med.name} ${fmtAmount(amount)}${med.unit} 기록했어요.`, {
+      label: '가족에게',
+      run: () => shareText(doseMessage(child, saved, store.entriesOf(child.id))),
+    });
     if (onSaved) onSaved(saved);
   }));
 }
