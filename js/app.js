@@ -74,7 +74,7 @@ function homeView() {
 
   const alertHtml = alerts.map((a) => `<div class="alert ${a.level}" role="alert">${icon('alert')}
       <div><strong>${esc(a.title)}</strong>${esc(a.body)}
-      ${a.level === 'urgent' ? `<br><a class="call" href="tel:119">${icon('phone', 16)}&nbsp;119 전화</a>` : ''}</div></div>`).join('');
+      ${a.level === 'urgent' || a.call ? `<br><a class="call" href="tel:119">${icon('phone', 16)}&nbsp;119 전화</a>` : ''}</div></div>`).join('');
 
   let nowCard;
   if (lastTemp) {
@@ -88,19 +88,26 @@ function homeView() {
         <div class="temp num tone-${lv.tone}">${fmt1(lastTemp.temp)}<small>℃</small></div>
         <div class="meta"><span class="badge bg-${lv.tone}">${esc(lv.label)}</span>
           <div class="muted small" style="margin-top:6px">${esc(ago(lastTemp.at, now))} · ${esc(clock(lastTemp.at))}${lastTemp.site ? ` · ${esc(lastTemp.site)}` : ''}</div>
+          ${lastTemp.wellbeing ? `<div class="small" style="margin-top:2px">${esc(store.wellbeingLabel(lastTemp.wellbeing))}</div>` : ''}
         </div></div>
       ${change || peak ? `<p class="small" style="margin:10px 0 0;color:var(--text-2)">${esc(change)}${change && peak
         ? '<span class="faint"> · </span>' : ''}${peak ? `<span class="faint">${esc(peak)}</span>` : ''}</p>` : ''}
       ${ep ? `<p class="small muted" style="margin:12px 0 0">이번 열은 ${esc(dayLabel(ep.start, now).replace(/^.* · /, ''))} ${esc(clock(ep.start))}부터 —
         <b>${Math.max(1, Math.round(ep.hours))}시간째</b></p>` : ''}
-      <p class="tip">${esc(careTip(lastTemp.temp))}</p>`;
+      <p class="tip">${esc(careTip(lastTemp.temp))}</p>
+      <div class="helplinks"><button class="link" data-help-er>병원에 가야 할 때 ${icon('chev', 14)}</button>
+        <button class="link" data-help-fever>열, 겁내지 않아도 돼요 ${icon('chev', 14)}</button></div>`;
   } else {
     nowCard = `<div class="empty-now">${thermArt()}<div><b>아직 체온 기록이 없어요</b>
       <div class="muted small">아래 「체온」을 눌러 처음 잰 체온을 남겨 주세요.</div></div></div>`;
   }
 
+  const nexts = Object.fromEntries(Object.values(GROUPS).map((g) => [g.key, nextDose(g.key, history, now, Number(child.weight) || 0)]));
   const doseCards = Object.values(GROUPS).map((g) => {
-    const n = nextDose(g.key, history, now, Number(child.weight) || 0);
+    const n = nexts[g.key];
+    // 다른 계열을 먹인 지 얼마 안 됐으면 — 번갈아 먹이기는 계속 힘들어할 때만(NICE 1.6.6)
+    const otherLast = Object.values(nexts).find((x) => x.group !== g.key).last;
+    const alt = n.canNow && otherLast && now - new Date(otherLast.at) < 6 * HOUR;
     const color = g.key === 'NSAID' ? 'var(--nsaid)' : 'var(--apap)';
     // 남은 양은 그 계열에서 마지막에 먹인 약(없으면 내 약 중 그 계열 첫 번째)의 단위로
     const lastMed = n.last && store.get().meds.find((m) => m.id === n.last.medId);
@@ -111,7 +118,7 @@ function homeView() {
     let when;
     if (n.canNow) {
       state = n.last ? '지금 가능' : '먹인 적 없음';
-      when = n.last ? `마지막 ${clock(n.last.at)}` : '지금 먹일 수 있어요';
+      when = alt ? '번갈아 먹이기는 계속 힘들어할 때만' : n.last ? `마지막 ${clock(n.last.at)}` : '지금 먹일 수 있어요';
     } else {
       state = `${until(n.at, now)} 뒤`;
       when = `${clock(n.at)}부터`;
@@ -174,7 +181,7 @@ function rowHtml(e, withDay = false) {
     const lv = feverLevel(e.temp);
     ico = `<span class="ico bg-${lv.tone}">${icon('therm')}</span>`;
     what = `<b class="num tone-${lv.tone}">${fmt1(e.temp)}℃</b> <span class="muted small">${esc(lv.label)}</span>`;
-    sub = [e.site, e.memo].filter(Boolean).join(' · ');
+    sub = [e.site, store.wellbeingLabel(e.wellbeing), e.memo].filter(Boolean).join(' · ');
   } else if (e.type === 'med') {
     const ing = INGREDIENTS[e.ingredient];
     const nsaid = ing?.group === 'NSAID';
@@ -263,8 +270,12 @@ function calcView() {
       <div data-calc-out aria-live="polite">${out}</div></section>
     <section class="card prose" aria-label="주의"><h2>꼭 확인하세요</h2>
       <ul><li><b>포장의 함량</b>이 위 약의 함량과 같은지 보세요. 같은 성분도 제품마다 다를 수 있어요(설정 → 내 약에서 고침).</li>
+        <li><b>이름이 같아도 성분이 다른 약</b>이 있어요(예: 챔프시럽은 아세트아미노펜, 챔프이부펜시럽은 이부프로펜). 포장의 <b>성분명</b>을 보세요.</li>
+        <li><b>종합감기약</b>에도 아세트아미노펜이 든 것이 많아요. 같이 먹였다면 설정 → 내 약에 그 약을 아세트아미노펜으로 더해 함께 세세요.</li>
+        <li>현탁액(시럽)은 먹이기 전에 잘 흔드세요.</li>
         <li>포장 설명서의 <b>나이 · 체중별 용량표</b>와 의사 · 약사의 지시가 이 계산보다 먼저입니다.</li>
-        <li>아세트아미노펜 계열과 이부프로펜 계열(이부프로펜 · 덱시부프로펜)을 번갈아 먹일 때는 의사 · 약사와 상의하세요.</li>
+        <li>시럽은 계량컵보다 <b>눈금 있는 먹이는 주사기</b>로 재세요 — 잘못 재는 일이 훨씬 적어요.</li>
+        <li>두 계열을 한꺼번에 먹이지 마세요. 번갈아 먹이기는 아이가 계속 힘들어할 때만, 의사 · 약사와 상의해서.</li>
         <li>먹인 약은 꼭 「해열제」로 기록해 두세요 — 다음 먹일 때와 하루 최대량을 셉니다.</li></ul></section>`;
   return shell(inner, '용량');
 }
@@ -310,6 +321,7 @@ function settingsView() {
     <div class="section-title">도움말</div><div class="list">
       <button type="button" class="item" data-help-er>${icon('alert', 20)}<span class="grow"><b>바로 병원에 가야 할 때</b></span>${icon('chev', 18)}</button>
       <button type="button" class="item" data-help-dose>${icon('info', 20)}<span class="grow"><b>해열제 간격 · 교차 복용</b></span>${icon('chev', 18)}</button>
+      <button type="button" class="item" data-help-fever>${icon('therm', 20)}<span class="grow"><b>열, 겁내지 않아도 돼요</b></span>${icon('chev', 18)}</button>
       <button type="button" class="item" data-help-about>${icon('info', 20)}<span class="grow"><b>이 앱에 대해</b>
         <small>판 ${esc(env.VERSION)}</small></span>${icon('chev', 18)}</button></div>`;
   return shell(inner, '설정');
@@ -320,14 +332,25 @@ function helpEr() {
   sheet({ title: '바로 병원에 가야 할 때', body: `<div class="prose">
     <h3>바로 응급실 · 119</h3><ul>
       <li>생후 3개월 미만 아기가 38℃ 이상</li><li>경련(열성 경련 포함) · 의식이 흐리거나 깨워도 잘 안 깸</li>
-      <li>숨쉬기 힘들어함 · 입술이 파래짐</li><li>누르면 없어지지 않는 붉은 · 보라 반점</li>
-      <li>소변이 크게 줄거나(6~8시간 없음) 입이 바짝 마름 · 울어도 눈물이 없음</li><li>목이 뻣뻣함 · 심한 두통 · 계속 토함</li></ul>
+      <li>숨쉬기 힘들어함 · 숨 쉴 때 끙끙거림 · 입술이 파래짐</li>
+      <li>피부가 창백하거나 얼룩덜룩함 · 약하게 또는 날카롭게 그치지 않고 울음</li>
+      <li>누르면 없어지지 않는 붉은 · 보라 반점</li><li>숫구멍(대천문)이 튀어나옴 · 목이 뻣뻣함 · 심한 두통 · 계속 토함</li>
+      <li>소변이 크게 줄거나(6~8시간 없음) 입이 바짝 마름 · 울어도 눈물이 없음</li></ul>
     <h3>진료를 받아 보세요</h3><ul>
-      <li>열이 3일(72시간) 넘게 이어짐</li><li>40℃ 이상이거나 해열제를 먹여도 잘 안 떨어짐</li>
-      <li>생후 3~6개월 아기의 열</li><li>열이 내렸다가 다시 오름 · 귀 아픔 · 소변 볼 때 아파함</li></ul>
-    <p>밤 · 휴일에 아이가 아플 때는 가까운 <b>달빛어린이병원</b>(야간 · 휴일 소아 진료)을 찾아보세요.
-      상담: <a href="tel:119">119</a>(응급) · <a href="tel:1339">1339</a>(질병관리청 콜센터).</p>
-    <p class="faint small">일반적인 안내입니다. 아이 상태가 걱정되면 이 목록과 상관없이 진료를 받으세요.</p></div>` });
+      <li>두 돌 전 아이는 열이 24시간, 그 뒤로는 3일(72시간) 넘게 이어짐 — <b>5일</b>이 넘으면 꼭</li>
+      <li>생후 3~6개월 아기가 39℃ 이상 · 생후 3~6개월 아기의 열</li>
+      <li>40℃ 이상이거나 해열제를 먹여도 잘 안 떨어짐 · 노는 것이 눈에 띄게 줄어듦</li>
+      <li>열이 내렸다가 다시 오름 · 귀 아픔 · 소변 볼 때 아파함</li></ul>
+    <h3>알아 두세요</h3><ul>
+      <li>해열제는 열성 경련을 미리 막지 못해요. 경련이 5분 넘게 이어지거나 처음이면 119.</li>
+      <li>미지근한 물로 몸을 닦는 것은 권하지 않아요. 너무 껴입히지도 벗기지도 마세요.</li>
+      <li>생후 4주 미만은 겨드랑이에 전자체온계, 그 뒤로는 귀나 겨드랑이로 재세요. 이마 띠 체온계는 믿기 어려워요.</li></ul>
+    <p>밤 · 휴일에 아이가 아플 때는 가까운 <b>달빛어린이병원</b>(야간 · 휴일 소아 진료)을
+      <a href="https://www.e-gen.or.kr/moonlight/main.do" target="_blank" rel="noopener">응급의료포털에서 찾아보세요</a>.
+      응급 · 의료 상담은 <a href="tel:119">119</a>, 문 연 병원 · 약국은 <a href="tel:129">129</a>(보건복지상담센터).
+      가벼운 증상이면 응급실보다 동네 병 · 의원이나 달빛어린이병원이 먼저예요.</p>
+    <p class="faint small">일반적인 안내입니다(영국 NICE 「5세 미만 발열」 지침 · 미국소아과학회 안내를 바탕으로).
+      아이 상태가 걱정되면 이 목록과 상관없이 진료를 받으세요.</p></div>` });
 }
 
 function helpDose() {
@@ -336,13 +359,43 @@ function helpDose() {
       <li><b style="color:var(--apap)">아세트아미노펜 계열</b> — 4~6시간 간격, 24시간에 5번까지</li>
       <li><b style="color:var(--nsaid)">이부프로펜 계열</b>(이부프로펜 · 덱시부프로펜) — 6~8시간 간격, 24시간에 4번까지.
         이부프로펜과 덱시부프로펜은 같은 계열이라 번갈아 먹이면 안 돼요.</li></ul>
-    <h3>교차 복용</h3>
-    <p>한 계열을 먹였는데 열이 안 떨어질 때 다른 계열을 먹이는 것. 앞 약과 <b>2시간 이상</b> 띄우고, 각 계열의 간격 · 하루 횟수는
-      따로 지켜야 해요. 교차 복용은 의사 · 약사와 상의해 정하세요.</p>
+    <h3>해열제는 언제</h3>
+    <p>열을 몇 도까지 내리려는 것이 아니라 <b>아이가 힘들어할 때</b> 편하게 해 주려고 먹여요. 잘 자는 아이를 해열제 때문에 깨우지
+      않아도 돼요. 두 계열을 <b>한꺼번에 먹이지 마세요</b>.</p>
+    <h3>교차 복용(번갈아 먹이기)</h3>
+    <p>한 계열을 먹였는데도 아이가 <b>계속 힘들어하고</b>, 같은 약을 다시 먹일 때가 아직 안 됐을 때만 생각해 보는 방법이에요.
+      앞 약과 <b>2시간 이상</b> 띄우고, 각 계열의 간격 · 하루 횟수는 따로 지켜야 해요. 헷갈려서 더 먹이기 쉬우니 꼭 기록하고,
+      의사 · 약사와 상의해 정하세요.</p>
+    <h3>이부프로펜 계열 전에</h3>
+    <p>수두일 때, 또는 구토 · 설사로 물을 잘 못 먹고 소변이 줄었을 때는 이부프로펜 계열 전에 의사 · 약사와 상의하세요.</p>
+    <h3>재는 도구</h3>
+    <p>시럽은 계량컵보다 <b>눈금 있는 먹이는 주사기(스포이트)</b>로 재야 덜 틀려요. 「작은술」이 아니라 mL 로 재세요.</p>
     <h3>이 앱이 세는 것</h3>
     <p>홈의 「다음 해열제」는 기록한 약으로 계열마다 언제부터 먹일 수 있는지 셉니다(같은 계열 간격 · 다른 계열 2시간 ·
       24시간 횟수). 기록하지 않은 약은 셀 수 없어요.</p>
-    <p class="faint small">숫자는 국내 어린이 해열제 포장 설명서의 일반 범위예요. 제품 설명서와 의사 · 약사의 지시가 먼저입니다.</p></div>` });
+    <p class="faint small">숫자는 국내 어린이 해열제 포장 설명서의 일반 범위예요. 안내는 NICE 지침 · 미국소아과학회 보고서(2011) ·
+      코크란 검토(2013)를 바탕으로 했어요. 이부프로펜 시럽은 제품에 따라 포장의 용량표가 1세부터일 수 있고, 좌약은 하루 횟수가
+      시럽보다 적을 수 있어요. 제품 설명서와 의사 · 약사의 지시가 먼저입니다.</p></div>` });
+}
+
+// 열 공포를 줄이는 짧은 글 — 부모가 가장 많이 찾는 것은 경고 신호와 「열이란」(Gwiasda 2026 Digit Health),
+// 짧은 안내만으로 열에 대한 생각이 바뀐다(Gwiasda 2022 GMS J Med Educ)
+function helpFever() {
+  sheet({ title: '열, 겁내지 않아도 돼요', body: `<div class="prose">
+    <h3>열은 몸이 싸우는 반응이에요</h3>
+    <p>열은 병균과 싸우려고 몸이 스스로 올리는 것이에요. 열 자체로 뇌가 상하지는 않아요(42℃ 아래).</p>
+    <h3>목표는 정상 체온이 아니라 편안함</h3>
+    <p>해열제는 아이가 힘들어할 때 편하게 해 주려고 먹여요. 먹여도 1~1.5℃ 정도 내려가는 것이 보통이고, 안 내린다고 바로 또 먹이지
+      마세요. 잘 자는 아이를 해열제 때문에 깨우지 않아도 돼요.</p>
+    <h3>해열제로 경련을 막지는 못해요</h3>
+    <p>열성 경련은 무섭지만 대개 몇 분 안에 멎어요. 해열제를 미리 먹여도 막지 못한다고 알려져 있어요.
+      5분 넘게 이어지거나 처음이면 119.</p>
+    <h3>밤에 더 높게 나와요</h3>
+    <p>열은 저녁 · 밤에 더 높고 아침에 낮게 나오는 일이 흔해요. 아침에 내렸다고 다 나은 것은 아닐 수 있어요.</p>
+    <h3>숫자보다 아이를 보세요</h3>
+    <p>잘 먹고 마시는지, 놀다가도 웃는지, 소변을 보는지가 체온 숫자보다 중요해요. 처지거나 잘 깨지 않으면 진료가 먼저예요.</p>
+    <p class="faint small">NICE 「5세 미만 발열」(2019) · 미국소아과학회 안내 · 열 공포 체계적 검토(Clericetti 2019) ·
+      FeverApp 연구(Beerenbrock 2026)를 바탕으로 한 일반 안내예요.</p></div>` });
 }
 
 function helpAbout() {
@@ -479,6 +532,7 @@ root.addEventListener('click', async (ev) => {
   else if ('helpDose' in d) helpDose();
   else if ('helpEr' in d) helpEr();
   else if ('helpAbout' in d) helpAbout();
+  else if ('helpFever' in d) helpFever();
   else if (d.calcMed) { calcState.medId = d.calcMed; render(); }
   else if (d.editMed) medPresetSheet(store.get().meds.find((m) => m.id === d.editMed));
   else if ('addMed' in d) medPresetSheet();

@@ -108,3 +108,13 @@ test('진료용 요약 — 소변은 증상 목록 대신 한 줄로', () => {
   assert.doesNotMatch(text, /- .*소변 봄/);
   assert.match(text, /- .*구토/);
 });
+
+test('아이 상태 — 1~5 만 남기고 요약에 함께', () => {
+  const out = store.normalize({ children: [{ id: 'c1', name: '하율' }], entries: [
+    { id: 'a', childId: 'c1', type: 'temp', temp: 38.4, wellbeing: 2, at: '2026-10-11T03:00:00Z' },
+    { id: 'b', childId: 'c1', type: 'temp', temp: 38.1, wellbeing: 9, at: '2026-10-11T04:00:00Z' },
+  ] });
+  assert.deepEqual(out.entries.map((e) => e.wellbeing), [2, null]);
+  const text = summary({ name: '하율' }, out.entries, new Date('2026-10-11T05:00:00Z'));
+  assert.match(text, /38.4℃ \(힘들어함\)/);
+});

@@ -130,6 +130,10 @@ button { cursor: pointer; }
 .card h2 { font-size: 15px; margin: 0 0 12px; color: var(--text-2); font-weight: 700; display: flex; align-items: center; gap: 8px; }
 .card h2 .spacer { flex: 1; }
 .card h2 .link { font-size: 13px; color: var(--text-3); font-weight: 600; background: none; border: 0; padding: 4px; }
+/* 지금 카드 아래 도움말 고리 — 밤에 엄지로 누르기 좋게 높이를 둔다 */
+.helplinks { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; }
+.helplinks .link { display: inline-flex; align-items: center; gap: 2px; min-height: 40px; padding: 0; background: none; border: 0;
+  font-size: 14px; font-weight: 700; color: var(--text-2); }
 
 .now { display: flex; align-items: flex-end; gap: 14px; }
 .now .temp { font-size: 56px; line-height: 1; font-weight: 800; letter-spacing: -0.04em; }
@@ -179,6 +183,8 @@ button { cursor: pointer; }
 .alert strong { display: block; font-size: 15px; }
 .alert .ico { flex: none; width: 24px; height: 24px; color: var(--high); }
 .alert.warn .ico { color: var(--fever); }
+.alert.info { background: var(--info-soft); }
+.alert.info .ico { color: var(--info); }
 .alert a.call { display: inline-flex; margin-top: 8px; font-weight: 800; color: var(--high); text-decoration: none; }
 
 /* 그래프 */

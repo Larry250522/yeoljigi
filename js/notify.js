@@ -51,7 +51,7 @@ export function reschedule() {
     for (const g of Object.values(GROUPS)) {
       const n = nextDose(g.key, history, now, Number(child.weight) || 0);
       if (n.last && !n.canNow && now - new Date(n.last.at) < 24 * HOUR) {
-        plan(n.at, `dose-${child.id}-${g.key}`, `${child.name} · ${g.short}`, `지금부터 다시 먹일 수 있어요 (${clock(n.at)}).`);
+        plan(n.at, `dose-${child.id}-${g.key}`, `${child.name} · ${g.short}`, `${clock(n.at)}부터 다시 먹일 수 있어요. 자고 있으면 깨우지 않아도 돼요.`);
       }
     }
     const lastMed = history.find((e) => e.type === 'med');

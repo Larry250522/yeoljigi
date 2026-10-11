@@ -16,12 +16,18 @@ export const DEFAULT_MEDS = [
   { id: 'm-dexi', name: '덱시부프로펜 시럽', ingredient: 'dexibuprofen', conc: 12, unit: 'mL' },
 ];
 
-export const SITES = ['귀', '이마', '겨드랑이', '입', '항문'];
+// 귀 · 겨드랑이를 먼저 — 0~5세는 입 · 항문으로 늘 재지 않는다, 이마 띠는 믿기 어렵다(NICE NG143 1.1)
+export const SITES = ['귀', '겨드랑이', '이마', '입', '항문'];
 
 export const SYMPTOMS = [
   '기침', '콧물', '코막힘', '목 아픔', '구토', '설사', '배 아픔', '발진', '오한', '두통', '귀 아픔', '잘 안 먹음',
-  '잘 못 잠', '보챔', '경련', '숨쉬기 힘듦', '축 처짐', '소변 줄어듦', '누르면 안 없어지는 발진',
+  '잘 못 잠', '보챔', '수두', '경련', '숨쉬기 힘듦', '축 처짐', '소변 줄어듦', '누르면 안 없어지는 발진',
 ];
+
+// 아이 상태 — 체온과 함께 한 번 눌러 남긴다. 해열제는 체온이 아니라 아이가 힘들어하는 정도로 정한다
+// (FeverApp 등록 연구: Möhler 2022 IJERPH — 상태가 좋으면 해열제를 덜 먹였다)
+export const WELLBEING = ['많이 힘들어함', '힘들어함', '보통', '괜찮음', '잘 놂'];
+export const wellbeingLabel = (v) => WELLBEING[Number(v) - 1] || '';
 
 // 그 밖의 일 — 소변(홈에서 한 번 누르기와 같은 표), 열의 까닭을 짐작하는 일(예방접종 뒤 1~2일은 열이 날 수 있다)
 export const EVENTS = [URINE_TAG, '예방접종 맞음', '병원 다녀옴', '어린이집 · 유치원 쉼'];
@@ -90,7 +96,9 @@ function cleanEntry(e) {
     memo: str(e.memo, 500) };
   if (e.type === 'temp') {
     const t = num(e.temp);
-    return t !== null && t >= 30 && t <= 45 ? { ...base, temp: t, site: str(e.site, 10) } : null;
+    const wb = num(e.wellbeing);
+    return t !== null && t >= 30 && t <= 45
+      ? { ...base, temp: t, site: str(e.site, 10), wellbeing: Number.isInteger(wb) && wb >= 1 && wb <= 5 ? wb : null } : null;
   }
   if (e.type === 'med') {
     const amount = num(e.amount);

@@ -24,14 +24,15 @@ export const INGREDIENTS = {
   ibuprofen: {
     id: 'ibuprofen', name: '이부프로펜', group: 'NSAID',
     mgPerKg: [5, 10], minIntervalH: 6, maxPerDay: 4, maxMgPerKgDay: 40, maxSingleMg: 400, maxMgDay: 1200,
-    // 30kg 미만 소아 하루 500mg — 이부프로펜 200mg 허가 변경(2019)의 문구. 시럽 허가 원문은 아직 대조 못 함(README 「확인할 것」)
+    // 30kg 미만 소아 하루 500mg — 시럽 허가 원문 「체중이 30kg미만인 어린이는 1일량이 500mg(25ml)을 초과해서는 안되며」
+    // (라미돈시럽 · 챔프이부펜 · 콜대원키즈이부펜, 2026-10 대조. 어린이부루펜시럽 원문에는 이 문장이 없다 — 더 보수적인 쪽으로 둔다)
     childDayCap: { underKg: 30, mg: 500 },
     minAgeMonths: 6, defaultConc: 20,
   },
   dexibuprofen: {
     id: 'dexibuprofen', name: '덱시부프로펜', group: 'NSAID',
     mgPerKg: [5, 7], minIntervalH: 6, maxPerDay: 4, maxMgPerKgDay: 28, maxSingleMg: 300, maxMgDay: 1200,
-    // 맥시부펜 시럽 허가: 체중 30kg 이하 소아는 1일 최대 25mL(덱시부프로펜 300mg)
+    // 맥시부펜 시럽 허가: 1회 5~7mg/kg, 1일 최대 4회(28mg/kg) · 체중 30kg 이하 소아는 1일 최대 25mL(덱시부프로펜 300mg)
     childDayCap: { underKg: 30, mg: 300, inclusive: true },
     minAgeMonths: 6, defaultConc: 12,
   },
@@ -163,9 +164,11 @@ export function careTip(temp) {
   switch (lv.key) {
     case 'low': return '체온이 낮게 나왔어요. 몸을 따뜻하게 하고 다시 재 보세요.';
     case 'normal': return '열이 없어요. 잘 먹고 노는지 아이 상태를 함께 살펴 주세요.';
-    case 'mild': return '옷을 가볍게 입히고 물을 자주 먹이세요. 1~2시간 뒤 다시 재 보세요.';
-    default: return '물을 자주 먹이세요. 아이가 힘들어하거나 처지면 해열제를 먹일 수 있어요. '
-      + '해열제를 먹였다면 1시간쯤 뒤 다시 재 보세요. 숫자보다 아이의 상태가 더 중요해요.';
+    // 너무 껴입히지도 벗기지도 않는다 · 미지근한 물로 닦지 않는다(NICE NG143 1.6.2~1.6.3)
+    case 'mild': return '너무 껴입히지도 벗기지도 말고 물을 자주 먹이세요. 1~2시간 뒤 다시 재 보세요.';
+    // 해열제는 열을 내리려고가 아니라 아이가 힘들어할 때(NICE 1.6.4 · AAP 2011). 처짐 · 잘 안 깸은 진료가 먼저(NICE 1.2.5~1.2.6)
+    default: return '물을 자주 먹이세요. 아이가 힘들어하거나 보채면 해열제를 먹일 수 있어요. 처지거나 잘 깨지 않으면 '
+      + '해열제보다 진료가 먼저예요. 해열제를 먹였다면 1시간쯤 뒤 다시 재 보세요. 숫자보다 아이의 상태가 더 중요해요.';
   }
 }
 
@@ -187,6 +190,25 @@ export function checkDose({ ingredient, mg, at = new Date(), weightKg, history =
 
   const age = ageNotice(ingredient, months);
   if (age) raise('warn', age);
+
+  // 38℃ 아래에서 먹이는 일이 흔하다(열나요 사용자 자료: Park 2021 JMIR mHealth) — 막지 않고 한 줄만
+  const lastTemp = history.filter((e) => e.type === 'temp' && ms(e.at) <= when && ms(e.at) > when - 2 * HOUR)
+    .sort((a, b) => ms(b.at) - ms(a.at))[0];
+  if (lastTemp && Number(lastTemp.temp) < FEVER_AT) {
+    raise('info', `마지막 체온이 ${Number(lastTemp.temp).toFixed(1)}℃예요. 열 때문이라면 아이가 힘들어할 때만 먹여도 돼요.`);
+  }
+
+  if (ing.group === 'NSAID') {
+    const tagsWithin = (hours) => new Set(history.filter((e) => e.type === 'symptom' && ms(e.at) <= when
+      && ms(e.at) > when - hours * HOUR).flatMap((e) => e.tags || []));
+    if (tagsWithin(7 * 24).has(CHICKENPOX_TAG)) {
+      raise('warn', '수두일 때는 이부프로펜 계열을 피하도록 권해요. 먹이기 전에 의사 · 약사와 상의하세요.');
+    }
+    const dry = DEHYDRATION_TAGS.filter((t) => tagsWithin(24).has(t));
+    if (dry.length) {
+      raise('info', `${dry.join(' · ')} 기록이 있어요. 물을 잘 못 먹거나 소변이 줄었다면 이부프로펜 계열은 의사 · 약사와 먼저 상의하세요.`);
+    }
+  }
 
   if (weightKg > 0 && dose > 0) {
     const range = doseRange(ingredient, weightKg, 1);
@@ -300,6 +322,16 @@ function fmtGap(hours) {
 // 병원에 가야 할 신호로 보는 증상
 export const URGENT_SYMPTOMS = ['경련', '숨쉬기 힘듦', '축 처짐', '소변 줄어듦', '누르면 안 없어지는 발진'];
 
+// 이부프로펜 계열을 먹이기 전에 한 번 더 — 수두(NICE CKS: 수두에는 NSAID 를 피한다),
+// 탈수(구토 · 설사 · 소변 줄어듦 — 탈수한 아이의 NSAID 급성 신손상: Misurac 2013 J Pediatr, Balestracci 2015 Pediatr Nephrol)
+export const CHICKENPOX_TAG = '수두';
+export const DEHYDRATION_TAGS = ['구토', '설사', '소변 줄어듦'];
+
+// 열이 이어지는 시간 — 두 돌 전 24시간 · 그 뒤 72시간이면 진료(AAP HealthyChildren 「When to Call the Pediatrician」),
+// 5일이면 꼭 진료(가와사키병 등 — NICE NG143 1.2.14 · 1.7.3)
+export const FEVER_CALL_H = { under2: 24, over2: 72 };
+export const FEVER_LONG_H = 120;
+
 // 소변(기저귀 포함) — 홈에서 한 번 눌러 남긴다. 열이 나는 동안 이만큼 기록이 비면 짚어 준다(도움말 「6~8시간 없음」과 맞춘다).
 export const URINE_TAG = '소변 봄';
 export const URINE_GAP_H = 8;
@@ -354,6 +386,10 @@ export function alertsFor(child, history, now = new Date()) {
   if (months !== null && months < 3 && maxTemp >= FEVER_AT) {
     out.push({ level: 'urgent', title: '생후 3개월 미만의 열', body: '해열제를 먹이기 전에 바로 병원(응급실)에 가세요.' });
   }
+  // 생후 3~6개월 · 39℃ 이상은 진료(NICE NG143 1.2.13 amber)
+  if (months !== null && months >= 3 && months < 6 && maxTemp >= 39) {
+    out.push({ level: 'warn', title: '생후 3~6개월 · 39℃ 이상', body: '오늘 안에 진료를 받으세요.' });
+  }
   const tags = new Set(recent.filter((e) => e.type === 'symptom').flatMap((e) => e.tags || []));
   const urgentTags = URGENT_SYMPTOMS.filter((t) => tags.has(t));
   if (urgentTags.length) {
@@ -363,8 +399,19 @@ export function alertsFor(child, history, now = new Date()) {
     out.push({ level: 'warn', title: '40℃ 이상', body: '해열제를 먹인 뒤에도 떨어지지 않거나 아이가 처지면 진료를 받으세요.' });
   }
   const ep = feverEpisode(history, now);
-  if (ep && ep.hours >= 72) {
-    out.push({ level: 'warn', title: '열이 3일 넘게 이어짐', body: '열이 72시간 넘게 이어지면 진료를 받아 원인을 확인하세요.' });
+  // 나이를 모르면 72시간(생년월일은 넣지 않아도 된다)
+  const callH = months !== null && months < 24 ? FEVER_CALL_H.under2 : FEVER_CALL_H.over2;
+  if (ep && ep.hours >= FEVER_LONG_H) {
+    out.push({ level: 'warn', title: '열이 5일 넘게 이어짐', body: '꼭 진료를 받아 원인(가와사키병 등)을 확인하세요.' });
+  } else if (ep && ep.hours >= callH) {
+    out.push(callH === FEVER_CALL_H.under2
+      ? { level: 'warn', title: '열이 하루 넘게 이어짐', body: '두 돌 전 아이는 열이 24시간 넘게 이어지면 진료를 받아 보세요.' }
+      : { level: 'warn', title: '열이 3일 넘게 이어짐', body: '열이 72시간 넘게 이어지면 진료를 받아 원인을 확인하세요.' });
+  }
+  // 열성 경련을 한 아이 — 해열제로 미리 막을 수는 없다(NICE 1.6.1 · Cochrane Offringa 2021)
+  if (ep && child && child.seizure) {
+    out.push({ level: 'info', call: true, title: '열성 경련을 한 적 있는 아이',
+      body: '해열제로 경련을 미리 막을 수는 없어요. 경련이 5분 넘게 이어지거나, 처음 보는 모습이면 119 에 전화하세요.' });
   }
   const pee = lastUrine(history, now);
   const peeGapH = pee ? (nowMs - ms(pee.at)) / HOUR : 0;

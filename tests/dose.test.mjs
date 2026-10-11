@@ -242,3 +242,40 @@ test('소변 — 열이 나는 동안 기록이 8시간 넘게 비면 짚는다'
   assert.equal(has(9, [temp(38.8, 0), temp(38.5, 9)]), false, '소변을 기록해 오지 않은 아이는 짚지 않는다');
   assert.equal(has(25, [temp(38.8, 0), pee(0), temp(38.5, 24)]), false, '기록을 그만둔 지 하루가 넘으면 짚지 않는다');
 });
+
+test('지침 반영 — 나이에 따른 열 기간 · 3~6개월 39℃ · 경련 이력', () => {
+  const toddler = { birth: '2025-06-01' };            // 16개월
+  const fever = (hs) => hs.map((h) => temp(38.6, h));
+  const titles = (child, list, h) => alertsFor(child, list, new Date(at(h))).map((a) => a.title);
+  assert.ok(titles(toddler, fever([0, 12, 25]), 25.5).includes('열이 하루 넘게 이어짐'), '두 돌 전은 24시간');
+  const kid = { birth: '2022-01-01' };
+  assert.deepEqual(titles(kid, fever([0, 12, 25]), 25.5), [], '두 돌 뒤는 72시간까지 조용히');
+  assert.ok(titles(kid, fever([0, 20, 40, 60, 80, 100, 121]), 121.5).includes('열이 5일 넘게 이어짐'));
+  assert.ok(!titles(kid, fever([0, 20, 40, 60, 80, 100, 121]), 121.5).includes('열이 3일 넘게 이어짐'), '5일이면 한 단계만');
+  const infant = { birth: '2026-06-01' };             // 4개월
+  assert.ok(titles(infant, [temp(39.1, 0)], 1).includes('생후 3~6개월 · 39℃ 이상'));
+  assert.ok(!titles(infant, [temp(38.6, 0)], 1).includes('생후 3~6개월 · 39℃ 이상'));
+  const seizure = alertsFor({ birth: '2022-01-01', seizure: true }, [temp(38.5, 0)], new Date(at(1)));
+  assert.ok(seizure.some((a) => a.level === 'info' && a.call));
+  assert.equal(alertsFor({ birth: '2022-01-01', seizure: true }, [temp(37, 0)], new Date(at(1))).length, 0, '열이 없으면 조용히');
+});
+
+test('이부프로펜 계열 전에 — 수두 · 탈수 기록, 38℃ 아래 투약은 막지 않고 알린다', () => {
+  const sym = (tags, h) => ({ type: 'symptom', tags, at: at(h) });
+  const texts = (r) => r.messages.map((m) => m.text).join(' ');
+  const pox = checkDose({ ingredient: 'ibuprofen', mg: 120, at: new Date(at(48)), weightKg: 13, history: [sym(['수두'], 0)] });
+  assert.equal(pox.level, 'warn');
+  assert.match(texts(pox), /수두/);
+  const dry = checkDose({ ingredient: 'dexibuprofen', mg: 70, at: new Date(at(5)), weightKg: 13, history: [sym(['구토', '설사'], 1)] });
+  assert.match(texts(dry), /구토 · 설사 기록/);
+  const apap = checkDose({ ingredient: 'acetaminophen', mg: 160, at: new Date(at(5)), weightKg: 13, history: [sym(['수두', '구토'], 1)] });
+  assert.doesNotMatch(texts(apap), /수두|구토/, '아세트아미노펜 계열에는 붙이지 않는다');
+  const low = checkDose({ ingredient: 'acetaminophen', mg: 160, at: new Date(at(5)), weightKg: 13, history: [temp(37.6, 4)] });
+  assert.equal(low.level, 'info');
+  assert.match(texts(low), /37.6℃/);
+});
+
+test('체온 안내 — 처지면 해열제보다 진료', () => {
+  assert.match(careTip(38.6), /처지거나 잘 깨지 않으면 해열제보다 진료가 먼저/);
+  assert.doesNotMatch(careTip(38.6), /처지면 해열제를/);
+});

@@ -3,6 +3,7 @@
 import {
   DAY, GROUPS, HOUR, INGREDIENTS, URINE_TAG, ageLabel, ageMonths, feverEpisode, lastUrine, nextDose,
 } from './dose.js';
+import { WELLBEING } from './store.js';
 import { clock, fmt1, fmtAmount } from './ui.js';
 
 export function summary(child, entries, now = new Date(), hours = 72) {
@@ -16,6 +17,7 @@ export function summary(child, entries, now = new Date(), hours = 72) {
   const symptoms = recent.filter((e) => e.type === 'symptom' && !peeOnly(e));
   const lines = [];
   const age = ageLabel(ageMonths(child.birth, now));
+  const wb = (e) => WELLBEING[Number(e.wellbeing) - 1] || '';
   lines.push(`[${child.name}${age ? ` · ${age}` : ''}${child.weight ? ` · ${child.weight}kg` : ''}] 최근 ${hours}시간 기록`);
 
   if (child.seizure) lines.push('열성 경련 과거력 있음');
@@ -39,7 +41,10 @@ export function summary(child, entries, now = new Date(), hours = 72) {
   }
   if (temps.length) {
     lines.push('', '체온');
-    for (const t of temps) lines.push(`- ${stamp(t.at)} ${fmt1(t.temp)}℃${t.site ? ` (${t.site})` : ''}`);
+    for (const t of temps) {
+      const note = [t.site, wb(t)].filter(Boolean).join(' · ');
+      lines.push(`- ${stamp(t.at)} ${fmt1(t.temp)}℃${note ? ` (${note})` : ''}`);
+    }
   }
   if (symptoms.length) {
     lines.push('', '증상');

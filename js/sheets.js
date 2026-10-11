@@ -103,7 +103,12 @@ export function tempSheet(child, entry = null) {
       </div>
       <div class="field" style="margin-top:14px"><span>잰 곳</span>
         <div class="chips" role="group" aria-label="잰 곳">${store.SITES.map((s) => `<button type="button" class="chip" data-site="${esc(s)}"
-          aria-pressed="${s === site}">${esc(s)}</button>`).join('')}</div></div>
+          aria-pressed="${s === site}">${esc(s)}</button>`).join('')}</div>
+        <div class="hint" data-site-hint></div></div>
+      <div class="field"><span>아이 상태 (선택)</span>
+        <div class="chips" role="group" aria-label="아이 상태">${store.WELLBEING.map((w, i) => `<button type="button" class="chip"
+          data-wb="${i + 1}" aria-pressed="${Number(entry?.wellbeing) === i + 1}">${esc(w)}</button>`).join('')}</div>
+        <div class="hint">숫자보다 아이가 어떤지가 더 중요해요. 해열제는 아이가 힘들어할 때 먹여요.</div></div>
       ${whenField(entry ? entry.at : new Date())}
       <label class="field"><span>메모 (선택)</span><input class="input" name="memo" maxlength="200" value="${esc(entry?.memo || '')}"
         placeholder="예: 자다 깨서 잼"></label>`,
@@ -132,8 +137,23 @@ export function tempSheet(child, entry = null) {
   // 읽을 수 없는 값은 지우지 않고 둔다 — 앞 값으로 바꿔 놓으면 모르는 새 다른 체온이 저장된다
   typed.addEventListener('blur', () => { if (parseTemp(typed.value) !== null) show(); });
   typed.addEventListener('keydown', (e) => { if (e.key === 'Enter') typed.blur(); });
+  // 잰 곳 안내(NICE NG143 1.1) — 4주 미만은 겨드랑이 전자체온계, 이마는 덜 정확
+  const months = ageMonths(child.birth);
+  const siteHint = () => {
+    const chosen = $('[data-site][aria-pressed="true"]', el)?.dataset.site;
+    $('[data-site-hint]', el).textContent = months !== null && months < 1
+      ? '생후 4주 미만은 겨드랑이에 전자체온계로 재세요.'
+      : chosen === '이마' ? '이마는 귀 · 겨드랑이보다 덜 정확할 수 있어요. 열이 의심되면 귀나 겨드랑이로 다시 재 보세요.'
+        : chosen === '입' || chosen === '항문' ? '다섯 살 아래는 보통 귀나 겨드랑이로 재요.' : '';
+  };
   $$('[data-site]', el).forEach((b) => b.addEventListener('click', () => {
     $$('[data-site]', el).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    siteHint();
+  }));
+  siteHint();
+  $$('[data-wb]', el).forEach((b) => b.addEventListener('click', () => {
+    const on = b.getAttribute('aria-pressed') !== 'true';     // 다시 누르면 지운다
+    $$('[data-wb]', el).forEach((x) => x.setAttribute('aria-pressed', String(on && x === b)));
   }));
   wireWhen(el);
   wireDelete(el, entry);
@@ -143,7 +163,8 @@ export function tempSheet(child, entry = null) {
     const when = readWhen(el);
     if (!when) return false;
     const chosen = $('[data-site][aria-pressed="true"]', el)?.dataset.site || '';
-    store.saveEntry({ ...(entry || {}), childId: child.id, type: 'temp', temp: value, site: chosen,
+    const wb = Number($('[data-wb][aria-pressed="true"]', el)?.dataset.wb) || null;
+    store.saveEntry({ ...(entry || {}), childId: child.id, type: 'temp', temp: value, site: chosen, wellbeing: wb,
       at: when.toISOString(), memo: $('[name=memo]', el).value.trim() });
     if (chosen) store.setSetting('site', chosen);
     closeSheet();
@@ -164,7 +185,8 @@ export function medSheet(child, entry = null, onSaved) {
     title: entry ? '해열제 기록 고치기' : `${child.name} 해열제`,
     body: `<div class="field"><span>어떤 약</span><div class="medpick" role="group" aria-label="약">
         ${meds.map((m) => medButton(m)).join('')}</div>
-        <div class="hint">약은 설정 → 내 약에서 더하거나 함량을 고칩니다. <b>포장에 적힌 함량</b>과 같은지 확인하세요.</div></div>
+        <div class="hint">약은 설정 → 내 약에서 더하거나 함량을 고칩니다. <b>포장에 적힌 성분 · 함량</b>과 같은지 확인하세요.
+          이름이 같아도 성분이 다른 약이 있어요.</div></div>
       <div data-check aria-live="polite" style="margin:-4px 0 14px"></div>
       <div class="field"><span>먹인 양</span>
         <div class="dial" style="padding:0">
@@ -390,7 +412,8 @@ export function medPresetSheet(med = null) {
         <button type="button" class="chip" data-unit="개" aria-pressed="${med?.unit === '개'}">좌약 · 알약 (개)</button></div></div>
       <label class="field"><span data-conc-label>함량</span><input class="input num" type="number" name="conc" inputmode="decimal" step="0.1"
         min="0.1" value="${esc(med?.conc ?? 32)}">
-        <div class="hint">포장 · 설명서에 적힌 대로. 시럽은 「1mL 에 몇 mg」(예: 160mg/5mL → 32), 좌약 · 알약은 「1개에 몇 mg」.</div></label>`,
+        <div class="hint">포장 · 설명서에 적힌 대로. 시럽은 「1mL 에 몇 mg」(예: 160mg/5mL → 32), 좌약 · 알약은 「1개에 몇 mg」.
+          아세트아미노펜이 든 종합감기약도 여기 더하면 함께 셉니다.</div></label>`,
     footer: `${med ? `<button class="btn danger" data-del aria-label="이 약 지우기">${icon('trash', 20)}</button>` : ''}
       <button class="btn primary" data-save>저장</button>`,
   });
