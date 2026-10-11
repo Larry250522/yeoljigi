@@ -1,0 +1,215 @@
+// 체온 구간 · 용량 · 복용 간격 — node --test
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  HOUR, ageMonths, alertsFor, careTip, checkDose, dailyLeft, dailyMaxMg, doseRange, feverEpisode, feverLevel, nextDose,
+} from '../js/dose.js';
+
+const T0 = new Date('2026-10-11T09:00:00+09:00');
+const at = (h) => new Date(T0.getTime() + h * HOUR).toISOString();
+const med = (ingredient, mg, h) => ({ type: 'med', ingredient, mg, at: at(h) });
+const temp = (value, h) => ({ type: 'temp', temp: value, at: at(h) });
+
+test('체온 구간', () => {
+  assert.equal(feverLevel(36.5).key, 'normal');
+  assert.equal(feverLevel(37.5).key, 'mild');
+  assert.equal(feverLevel(37.9).key, 'mild');
+  assert.equal(feverLevel(38.0).key, 'fever');
+  assert.equal(feverLevel(39.0).key, 'high');
+  assert.equal(feverLevel(40.2).key, 'severe');
+  assert.equal(feverLevel(35.0).key, 'low');
+  assert.equal(feverLevel('x'), null);
+});
+
+test('만 개월 수', () => {
+  assert.equal(ageMonths('2026-01-15', new Date('2026-10-14')), 8);
+  assert.equal(ageMonths('2026-01-15', new Date('2026-10-15')), 9);
+  assert.equal(ageMonths('', T0), null);
+});
+
+test('체중별 용량 — 아세트아미노펜 32mg/mL, 12kg', () => {
+  const r = doseRange('acetaminophen', 12, 32);
+  assert.deepEqual(r.mg, [120, 180]);
+  assert.deepEqual(r.amount, [3.8, 5.6]);   // 아래는 올리고 위는 내린다
+  assert.equal(r.capped, false);
+});
+
+test('체중별 용량 — 어른 1회 최대량을 넘지 않는다', () => {
+  const r = doseRange('ibuprofen', 60, 20);
+  assert.equal(r.mg[1], 400);
+  assert.equal(r.capped, true);
+  assert.equal(doseRange('ibuprofen', 0, 20), null);
+});
+
+test('같은 계열은 간격 전이면 막는다', () => {
+  const history = [med('acetaminophen', 150, 0)];
+  const early = checkDose({ ingredient: 'acetaminophen', mg: 150, at: at(3), weightKg: 12, history });
+  assert.equal(early.level, 'block');
+  const later = checkDose({ ingredient: 'acetaminophen', mg: 150, at: at(4), weightKg: 12, history });
+  assert.equal(later.level, 'ok');
+});
+
+test('이부프로펜 · 덱시부프로펜은 같은 계열', () => {
+  const history = [med('ibuprofen', 100, 0)];
+  const r = checkDose({ ingredient: 'dexibuprofen', mg: 70, at: at(3), weightKg: 12, history });
+  assert.equal(r.level, 'block');
+});
+
+test('교차 복용 — 다른 계열은 2시간 안이면 경고만', () => {
+  const history = [med('acetaminophen', 150, 0)];
+  assert.equal(checkDose({ ingredient: 'ibuprofen', mg: 100, at: at(1), weightKg: 12, history }).level, 'warn');
+  assert.equal(checkDose({ ingredient: 'ibuprofen', mg: 100, at: at(2), weightKg: 12, history }).level, 'ok');
+});
+
+test('1회 최대량을 넘으면 막는다', () => {
+  const r = checkDose({ ingredient: 'acetaminophen', mg: 300, at: at(0), weightKg: 12, history: [] });
+  assert.equal(r.level, 'block');
+});
+
+test('하루 횟수 — 아세트아미노펜 5번까지', () => {
+  const history = [0, 4, 8, 12, 16].map((h) => med('acetaminophen', 120, h));
+  const r = checkDose({ ingredient: 'acetaminophen', mg: 120, at: at(20), weightKg: 12, history });
+  assert.equal(r.level, 'block');
+  assert.ok(r.messages.some((m) => m.text.includes('6번째')));
+});
+
+test('하루 최대량(mg) — 1회 허용 폭 안이어도 24시간 합이 넘으면 막는다', () => {
+  // 12kg 아세트아미노펜 하루 900mg. 189mg(1회 최대 180mg 의 5% 허용 안) × 5 = 945mg
+  const history = [0, 4, 8, 12].map((h) => med('acetaminophen', 189, h));
+  const r = checkDose({ ingredient: 'acetaminophen', mg: 189, at: at(16), weightKg: 12, history });
+  assert.equal(r.level, 'block');
+  assert.ok(r.messages.some((m) => m.text.includes('하루 최대량')));
+  assert.notEqual(checkDose({ ingredient: 'acetaminophen', mg: 180, at: at(16), weightKg: 12,
+    history: [0, 4, 8, 12].map((h) => med('acetaminophen', 180, h)) }).level, 'block');
+});
+
+test('이부프로펜 계열 하루 최대량은 이부프로펜 · 덱시부프로펜을 비율로 더한다', () => {
+  // 12kg: 이부프로펜 하루 480mg, 덱시부프로펜 하루 300mg(30kg 이하 허가 상한) → 120 · 120 · 120(0.75) + 덱시 75(0.25) = 1.0
+  const history = [0, 6, 12].map((h) => med('ibuprofen', 120, h));
+  assert.equal(checkDose({ ingredient: 'dexibuprofen', mg: 75, at: at(18), weightKg: 12, history }).level, 'ok');
+  const r = checkDose({ ingredient: 'dexibuprofen', mg: 84, at: at(18), weightKg: 12, history });
+  assert.equal(r.level, 'block');
+  assert.ok(r.messages.some((m) => m.text.includes('하루 최대량')));
+});
+
+test('덱시부프로펜 — 체중 30kg 이하는 하루 300mg(맥시부펜 허가)', () => {
+  assert.equal(dailyMaxMg('dexibuprofen', 20), 300);
+  assert.equal(dailyMaxMg('dexibuprofen', 30), 300);
+  assert.equal(dailyMaxMg('dexibuprofen', 10), 280);
+  assert.equal(dailyMaxMg('dexibuprofen', 40), 1120);
+  assert.equal(dailyMaxMg('ibuprofen', 20), 500);
+  assert.equal(dailyMaxMg('acetaminophen', 20), 1500);
+});
+
+test('지난 시각으로 넣은 기록 — 뒤에 있는 같은 계열 약도 본다', () => {
+  // 10시에 먹인 기록이 있는데 8시에 먹였다고 넣으면 2시간 간격 — 막는다
+  const history = [med('acetaminophen', 150, 10)];
+  const r = checkDose({ ingredient: 'acetaminophen', mg: 150, at: at(8), weightKg: 12, history });
+  assert.equal(r.level, 'block');
+  assert.ok(r.messages.some((m) => m.text.includes('뒤에')));
+  assert.equal(checkDose({ ingredient: 'acetaminophen', mg: 150, at: at(5), weightKg: 12, history }).level, 'ok');
+  // 다른 계열이 1시간 뒤에 있으면 경고
+  assert.equal(checkDose({ ingredient: 'ibuprofen', mg: 100, at: at(9), weightKg: 12, history }).level, 'warn');
+});
+
+test('지난 시각 기록 — 뒤쪽 24시간 창의 횟수도 센다', () => {
+  // 4 · 8 · 12 · 16 · 20시에 5번 — 0시에 하나 더 넣으면 0~20시 창이 6번
+  const history = [4, 8, 12, 16, 20].map((h) => med('acetaminophen', 120, h));
+  const r = checkDose({ ingredient: 'acetaminophen', mg: 120, at: at(0), weightKg: 12, history });
+  assert.ok(r.messages.some((m) => m.text.includes('6번째')));
+});
+
+test('다음 복용 — 횟수가 남아도 하루 최대량을 다 쓰면 기다린다', () => {
+  // 45kg 이부프로펜 하루 1200mg — 400mg × 3번이면 횟수는 3/4 지만 남은 양 0
+  const history = [0, 6, 12].map((h) => med('ibuprofen', 400, h));
+  const r = nextDose('NSAID', history, new Date(at(19)), 45);
+  assert.equal(r.canNow, false);
+  assert.equal(r.reason, '하루 최대량');
+  assert.equal(r.at.toISOString(), at(24));
+  assert.equal(nextDose('NSAID', history, new Date(at(19))).canNow, true, '체중을 모르면 횟수 · 간격만');
+});
+
+test('용량 표시 — mg 위 끝은 내림, 한 단위가 범위보다 크면 알린다', () => {
+  const r = doseRange('acetaminophen', 12.37, 32);
+  assert.deepEqual(r.mg, [124, 185]);
+  const pill = doseRange('acetaminophen', 5, 1000);
+  assert.equal(pill.unitTooBig, true);
+  assert.ok(pill.amount[0] <= pill.amount[1]);
+});
+
+test('어른 1회 최대량에는 반올림 여유를 두지 않는다', () => {
+  assert.equal(checkDose({ ingredient: 'ibuprofen', mg: 420, at: at(0), weightKg: 60, history: [] }).level, 'block');
+  assert.equal(checkDose({ ingredient: 'ibuprofen', mg: 400, at: at(0), weightKg: 60, history: [] }).level, 'ok');
+});
+
+test('나이 — 3개월 미만 · 이부프로펜 6개월 미만', () => {
+  assert.equal(checkDose({ ingredient: 'acetaminophen', mg: 50, weightKg: 5, months: 2 }).level, 'warn');
+  assert.equal(checkDose({ ingredient: 'ibuprofen', mg: 40, weightKg: 7, months: 5 }).level, 'warn');
+  assert.equal(checkDose({ ingredient: 'ibuprofen', mg: 50, weightKg: 8, months: 8 }).level, 'ok');
+});
+
+test('다음 복용 시각', () => {
+  const history = [med('acetaminophen', 150, 0), med('ibuprofen', 100, 1)];
+  const apap = nextDose('APAP', history, new Date(at(2)));
+  assert.equal(apap.canNow, false);
+  assert.equal(apap.at.toISOString(), at(4));
+  const nsaid = nextDose('NSAID', history, new Date(at(2)));
+  assert.equal(nsaid.at.toISOString(), at(7));
+  assert.equal(nextDose('APAP', history, new Date(at(4))).canNow, true);
+  assert.equal(nextDose('APAP', [], T0).canNow, true);
+});
+
+test('다음 복용 — 다른 계열을 막 먹였으면 2시간 뒤', () => {
+  const history = [med('acetaminophen', 150, 0)];
+  const r = nextDose('NSAID', history, new Date(at(0.5)));
+  assert.equal(r.at.toISOString(), at(2));
+});
+
+test('다음 복용 — 하루 횟수를 다 쓰면 가장 오래된 것의 24시간 뒤', () => {
+  const history = [0, 4, 8, 12, 16].map((h) => med('acetaminophen', 120, h));
+  const r = nextDose('APAP', history, new Date(at(21)));
+  assert.equal(r.canNow, false);
+  assert.equal(r.at.toISOString(), at(24));
+  assert.equal(r.countInDay, 5);
+});
+
+test('열 에피소드 — 24시간 넘게 비면 새로', () => {
+  const history = [temp(38.5, 0), temp(37.0, 10), temp(38.2, 20), temp(38.4, 30)];
+  const ep = feverEpisode(history, new Date(at(31)));
+  assert.equal(ep.start.toISOString(), at(0));
+  assert.equal(ep.hours, 30);
+  const gap = [temp(38.5, 0), temp(38.4, 30)];
+  assert.equal(feverEpisode(gap, new Date(at(31))).start.toISOString(), at(30));
+  assert.equal(feverEpisode(gap, new Date(at(60))), null);
+});
+
+test('짚어 줄 것', () => {
+  const baby = { birth: '2026-08-20' };
+  assert.equal(alertsFor(baby, [temp(38.1, 0)], new Date(at(1)))[0].level, 'urgent');
+  const kid = { birth: '2024-01-01' };
+  assert.deepEqual(alertsFor(kid, [temp(38.1, 0)], new Date(at(1))), []);
+  const long = [0, 24, 48, 72].map((h) => temp(38.6, h));
+  assert.ok(alertsFor(kid, long, new Date(at(73))).some((a) => a.title.includes('3일')));
+  const sym = [{ type: 'symptom', tags: ['경련'], at: at(0) }];
+  assert.equal(alertsFor(kid, sym, new Date(at(1)))[0].level, 'urgent');
+});
+
+test('24시간 남은 양 — 자정이 아니라 직전 24시간', () => {
+  const syrup = { ingredient: 'acetaminophen', conc: 32 };
+  // 12kg 하루 900mg. 180mg 두 번 → 40% 사용, 540mg = 16.8mL 남음
+  const history = [med('acetaminophen', 180, 0), med('acetaminophen', 180, 5)];
+  const left = dailyLeft('APAP', history, new Date(at(6)), 12, syrup);
+  assert.equal(Math.round(left.used * 100), 40);
+  assert.equal(left.mg, 540);
+  assert.equal(left.amount, 16.8);
+  // 첫 약이 24시간 밖으로 나가면 다시 늘어난다
+  assert.equal(dailyLeft('APAP', history, new Date(at(24.5)), 12, syrup).mg, 720);
+  assert.equal(dailyLeft('APAP', history, new Date(at(6)), 0, syrup), null);
+  assert.equal(dailyLeft('NSAID', history, new Date(at(6)), 12).used, 0);
+});
+
+test('체온 한 줄 안내', () => {
+  assert.match(careTip(38.5), /1시간쯤 뒤/);
+  assert.match(careTip(37.6), /1~2시간/);
+  assert.equal(careTip('x'), '');
+});
