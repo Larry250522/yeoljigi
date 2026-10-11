@@ -37,9 +37,13 @@ let state = blank();
 let persistent = true;
 const listeners = new Set();
 
+// 쿠키 · 사이트 데이터를 막은 브라우저는 localStorage 를 읽기만 해도 예외가 난다 — 꼭 try 안에서 부른다
+const local = () => globalThis.localStorage;
+
 /** 저장된 기록을 읽는다. 깨졌으면 지우지 않고 옆에 남겨 두고 새로 시작한다. */
-export function load(storage = globalThis.localStorage) {
+export function load(storage) {
   try {
+    storage = storage ?? local();
     const raw = storage.getItem(KEY);
     state = raw ? normalize(JSON.parse(raw)) : blank();
   } catch (err) {
@@ -122,9 +126,9 @@ export function normalize(data) {
   return out;
 }
 
-function save(storage = globalThis.localStorage) {
+function save(storage) {
   try {
-    storage.setItem(KEY, JSON.stringify(state));
+    (storage ?? local()).setItem(KEY, JSON.stringify(state));
     persistent = true;
   } catch {
     persistent = false;

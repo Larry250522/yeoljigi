@@ -349,5 +349,6 @@ textarea.input { height: 84px; padding: 12px 14px; resize: vertical; }
   padding: 0; border-bottom: 3px dashed transparent; border-radius: 0; color: inherit;
 }
 .dial-input:focus { outline: none; border-bottom-color: var(--brand); }
+.dial-input[aria-invalid="true"] { color: var(--high); border-bottom-color: var(--high); }
 /* 닫히는 창은 누르기를 받지 않는다 — 저장을 두 번 눌러 기록이 둘 생기지 않게 */
 .sheet:not(.open) { pointer-events: none; }

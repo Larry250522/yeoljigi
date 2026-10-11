@@ -74,3 +74,10 @@ test('열지기 백업이 아니면 불러오지 않는다', () => {
   }
   assert.equal(store.get().children.length, 1, '지금 기록은 그대로');
 });
+
+test('저장소를 읽기만 해도 예외가 나는 브라우저 — 멈추지 않고 메모리로 돈다', () => {
+  const blocked = { getItem() { throw new Error('SecurityError'); }, setItem() { throw new Error('SecurityError'); } };
+  const state = store.load(blocked);
+  assert.equal(state.children.length, 0);
+  assert.equal(store.isPersistent(), false);
+});

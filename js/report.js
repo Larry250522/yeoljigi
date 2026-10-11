@@ -16,7 +16,7 @@ export function summary(child, entries, now = new Date(), hours = 72) {
   if (child.seizure) lines.push('열성 경련 과거력 있음');
   if (child.note) lines.push(`참고: ${child.note}`);
   const ep = feverEpisode(entries, now);
-  if (ep) lines.push(`열 시작: ${stamp(ep.start)} (${Math.round(ep.hours)}시간째)`);
+  if (ep) lines.push(`열 시작: ${stamp(ep.start)} (${Math.max(1, Math.round(ep.hours))}시간째)`);
   if (temps.length) {
     const max = temps.reduce((m, e) => (Number(e.temp) > Number(m.temp) ? e : m));
     lines.push(`최고 체온: ${fmt1(max.temp)}℃ (${stamp(max.at)}) · 마지막: ${fmt1(temps[temps.length - 1].temp)}℃ (${stamp(temps[temps.length - 1].at)})`);

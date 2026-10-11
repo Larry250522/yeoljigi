@@ -1,14 +1,14 @@
 // 기록 창 — 체온 · 해열제 · 증상 · 아이 · 내 약. 아래에서 올라오는 창 하나에 한 가지를 넣는다.
 
 import {
-  INGREDIENTS, ageMonths, ageNotice, checkDose, doseRange, feverLevel,
+  INGREDIENTS, URGENT_SYMPTOMS, ageMonths, ageNotice, checkDose, doseRange, feverLevel,
 } from './dose.js';
 import * as store from './store.js';
 import {
   $, $$, closeSheet, confirmSheet, esc, fmt1, fmtAmount, fromLocalInput, icon, sheet, toLocalInput, toast,
 } from './ui.js';
 
-const URGENT = new Set(['경련', '숨쉬기 힘듦', '축 처짐', '소변 줄어듦', '누르면 안 없어지는 발진']);
+const URGENT = new Set(URGENT_SYMPTOMS);
 
 /** 친 체온 → 숫자. 「38.5」 · 「38,5」 · 「385」 모두 38.5. 34~42 밖이면 null. */
 export function parseTemp(text) {
@@ -48,12 +48,20 @@ function wireWhen(el, onChange) {
   mark();
 }
 
-/** 고른 시각. 앞으로의 시각(5분 넘게)은 기록하지 않는다 — 계산에서 빠져 「먹인 적 없음」으로 보이게 된다. */
+/**
+ * 저장할 시각. 앞으로의 시각(5분 넘게)은 받지 않고, 5분 안쪽(시계가 조금 다른 휴대폰)은 지금으로 맞춘다 —
+ * 지금보다 뒤에 놓인 기록은 계산 · 알림에서 빠져 「먹인 적 없음」으로 보이게 된다.
+ */
+export function pickWhen(at, now = new Date()) {
+  if (Number.isNaN(at.getTime())) return { error: '시각을 확인해 주세요.' };
+  if (at.getTime() > now.getTime() + 5 * 60000) return { error: '아직 오지 않은 시각이에요. 시각을 확인해 주세요.' };
+  return { at: at.getTime() > now.getTime() ? new Date(now) : at };
+}
+
 function readWhen(el) {
-  const at = fromLocalInput($('[name=at]', el).value);
-  if (Number.isNaN(at.getTime())) { toast('시각을 확인해 주세요.'); return null; }
-  if (at.getTime() > Date.now() + 5 * 60000) { toast('아직 오지 않은 시각이에요. 시각을 확인해 주세요.'); return null; }
-  return at;
+  const r = pickWhen(fromLocalInput($('[name=at]', el).value));
+  if (r.error) { toast(r.error); return null; }
+  return r.at;
 }
 
 /** 저장 단추를 두 번 눌러 같은 기록이 둘 생기지 않게 — 한 번만 부른다. */
@@ -103,7 +111,7 @@ export function tempSheet(child, entry = null) {
   const range = $('.range', el);
   const typed = $('[data-v]', el);
   const show = (fromTyping = false) => {
-    if (!fromTyping) typed.value = fmt1(value);
+    if (!fromTyping) { typed.value = fmt1(value); typed.removeAttribute('aria-invalid'); }
     range.value = value;
     const lv = feverLevel(value);
     $('[data-level]', el).innerHTML = `<span class="badge bg-${lv.tone}">${esc(lv.label)}</span>`;
@@ -117,9 +125,11 @@ export function tempSheet(child, entry = null) {
   typed.addEventListener('focus', () => typed.select());
   typed.addEventListener('input', () => {
     const v = parseTemp(typed.value);
+    typed.setAttribute('aria-invalid', String(v === null));
     if (v !== null) { value = v; show(true); }
   });
-  typed.addEventListener('blur', () => show());
+  // 읽을 수 없는 값은 지우지 않고 둔다 — 앞 값으로 바꿔 놓으면 모르는 새 다른 체온이 저장된다
+  typed.addEventListener('blur', () => { if (parseTemp(typed.value) !== null) show(); });
   typed.addEventListener('keydown', (e) => { if (e.key === 'Enter') typed.blur(); });
   $$('[data-site]', el).forEach((b) => b.addEventListener('click', () => {
     $$('[data-site]', el).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
@@ -128,6 +138,7 @@ export function tempSheet(child, entry = null) {
   wireDelete(el, entry);
   show();
   $('[data-save]', el).addEventListener('click', once(() => {
+    if (parseTemp(typed.value) === null) { toast('체온을 34~42℃ 사이로 넣어 주세요.'); typed.focus(); return false; }
     const when = readWhen(el);
     if (!when) return false;
     const chosen = $('[data-site][aria-pressed="true"]', el)?.dataset.site || '';
@@ -188,7 +199,7 @@ export function medSheet(child, entry = null, onSaved) {
 
   const render = (fromTyping = false) => {
     $$('[data-med]', el).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.med === med.id)));
-    if (!fromTyping) $('[data-v]', el).value = fmtAmount(amount);
+    if (!fromTyping) { $('[data-v]', el).value = fmtAmount(amount); $('[data-v]', el).removeAttribute('aria-invalid'); }
     $('[data-unit]', el).textContent = med.unit;
     const mg = Math.round(amount * med.conc);
     $('[data-mg]', el).textContent = `${INGREDIENTS[med.ingredient].name} ${mg}mg (${med.unit === 'mL' ? `${med.conc}mg/mL` : `1개 ${med.conc}mg`})`;
@@ -225,18 +236,24 @@ export function medSheet(child, entry = null, onSaved) {
   }));
   const typedAmount = $('[data-v]', el);
   typedAmount.addEventListener('focus', () => typedAmount.select());
+  const readAmount = () => {
+    const text = typedAmount.value.trim().replace(',', '.');
+    const v = Number(text);
+    return text !== '' && Number.isFinite(v) && v >= 0 && v <= 100 ? Math.round(v * 10) / 10 : null;
+  };
   typedAmount.addEventListener('input', () => {
-    const v = Number(typedAmount.value.replace(',', '.'));
-    if (Number.isFinite(v) && v >= 0 && v <= 100) { amount = Math.round(v * 10) / 10; render(true); }
+    const v = readAmount();
+    typedAmount.setAttribute('aria-invalid', String(v === null));
+    if (v !== null) { amount = v; render(true); }
   });
-  typedAmount.addEventListener('blur', () => render());
+  typedAmount.addEventListener('blur', () => { if (readAmount() !== null) render(); });
   typedAmount.addEventListener('keydown', (e) => { if (e.key === 'Enter') typedAmount.blur(); });
   wireWhen(el, () => render());
   wireDelete(el, entry);
   render();
 
   $('[data-save]', el).addEventListener('click', once(() => {
-    if (!(amount > 0)) { toast('먹인 양을 넣어 주세요.'); return false; }
+    if (readAmount() === null || !(amount > 0)) { toast('먹인 양을 넣어 주세요.'); typedAmount.focus(); return false; }
     const when = readWhen(el);
     if (!when) return false;
     const saved = {
@@ -327,20 +344,22 @@ export function childSheet(child = null, { first = false } = {}) {
     footer: `${child && !first ? `<button class="btn danger" data-del aria-label="이 아이 지우기">${icon('trash', 20)}</button>` : ''}
       <button class="btn primary" data-save>${child ? '저장' : '더하기'}</button>`,
   });
-  $('[data-save]', el).addEventListener('click', () => {
+  $('[data-save]', el).addEventListener('click', once(() => {
     const name = $('[name=name]', el).value.trim();
     const birth = $('[name=birth]', el).value;
     const weightRaw = $('[name=weight]', el).value;
     const weight = weightRaw === '' ? null : Number(weightRaw);
-    if (!name) { toast('이름을 넣어 주세요.'); $('[name=name]', el).focus(); return; }
-    if (weight !== null && !(weight >= 2 && weight <= 80)) { toast('몸무게는 2~80kg 사이로 넣어 주세요.'); return; }
+    if (!name) { toast('이름을 넣어 주세요.'); $('[name=name]', el).focus(); return false; }
+    // iOS 는 date 칸의 max 를 막지 않는다 — 앞날이면 0개월로 세어 「3개월 미만」 경고가 뜬다
+    if (birth && birth > toLocalInput(new Date()).slice(0, 10)) { toast('생년월일을 확인해 주세요.'); return false; }
+    if (weight !== null && !(weight >= 2 && weight <= 80)) { toast('몸무게는 2~80kg 사이로 넣어 주세요.'); return false; }
     const changedWeight = weight !== (child?.weight ?? null);
     store.saveChild({ ...(child || {}), name, birth, weight, seizure: $('[name=seizure]', el).checked,
       note: $('[name=note]', el).value.trim(),
       weightAt: changedWeight ? new Date().toISOString() : child?.weightAt || null });
     closeSheet();
     toast(child ? '저장했어요.' : `${name}을(를) 더했어요.`);
-  });
+  }));
   const del = $('[data-del]', el);
   if (del) {
     del.addEventListener('click', async () => {
@@ -381,15 +400,15 @@ export function medPresetSheet(med = null) {
     if (!med && unit === 'mL') $('[name=conc]', el).value = INGREDIENTS[e.target.value].defaultConc;
   });
   label();
-  $('[data-save]', el).addEventListener('click', () => {
+  $('[data-save]', el).addEventListener('click', once(() => {
     const name = $('[name=name]', el).value.trim();
     const conc = Number($('[name=conc]', el).value);
-    if (!name) { toast('이름을 넣어 주세요.'); return; }
-    if (!(conc > 0 && conc <= 1000)) { toast('함량을 확인해 주세요.'); return; }
+    if (!name) { toast('이름을 넣어 주세요.'); return false; }
+    if (!(conc > 0 && conc <= 1000)) { toast('함량을 확인해 주세요.'); return false; }
     store.saveMed({ ...(med || {}), name, ingredient: $('[name=ingredient]', el).value, conc, unit });
     closeSheet();
     toast('저장했어요.');
-  });
+  }));
   const del = $('[data-del]', el);
   if (del) del.addEventListener('click', () => { store.removeMed(med.id); closeSheet(); toast('지웠어요. 지난 기록은 그대로 있어요.'); });
 }

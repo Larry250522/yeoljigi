@@ -483,6 +483,7 @@ root.addEventListener('change', async (ev) => {
       applyTheme();
       toast(`아이 ${r.children}명 · 기록 ${r.entries}건을 불러왔어요.`);
     } catch {
+      t.value = '';                         // 같은 파일을 다시 골라도 change 가 오게
       toast('열지기 백업 파일이 아니거나 깨졌어요.');
     }
   }
