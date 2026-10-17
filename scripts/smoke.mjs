@@ -29,9 +29,11 @@ await new Promise((r) => server.once('listening', r));
 const base = `http://127.0.0.1:${server.address().port}/`;
 
 const profile = await mkdtemp(join(tmpdir(), 'yeoljigi-smoke-'));
-const port = 9300 + Math.floor(Math.random() * 600);
-const chrome = spawn(CHROME, ['--headless=new', '--no-sandbox', '--disable-gpu', `--remote-debugging-port=${port}`,
-  `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' });
+// 포트 0 — Chrome 이 빈 포트를 골라 프로필 폴더의 DevToolsActivePort 에 적는다(정해 둔 포트가 겹쳐 못 뜨는 일이 없게)
+const chrome = spawn(CHROME, ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--remote-debugging-port=0',
+  `--user-data-dir=${profile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+let chromeLog = '';
+chrome.stderr.on('data', (d) => { chromeLog = (chromeLog + d).slice(-2000); });
 
 let ws;
 const errors = [];
@@ -60,11 +62,13 @@ const click = async (selector, label = selector) => {
 let failed = false;
 try {
   let target;
-  for (let i = 0; i < 40 && !target; i += 1) {
+  for (let i = 0; i < 120 && !target; i += 1) {         // 러너가 처음 Chrome 을 띄울 때 느릴 수 있다 — 30초까지
     await wait(250);
+    const port = await readFile(join(profile, 'DevToolsActivePort'), 'utf8').then((t) => t.split('\n')[0]).catch(() => null);
+    if (!port) continue;
     target = await fetch(`http://127.0.0.1:${port}/json`).then((r) => r.json()).then((l) => l.find((t) => t.type === 'page')).catch(() => null);
   }
-  if (!target) throw new Error(`Chrome 을 띄우지 못했어요 (${CHROME})`);
+  if (!target) throw new Error(`Chrome 을 띄우지 못했어요 (${CHROME})\n${chromeLog}`);
   ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((r) => ws.addEventListener('open', r));
   ws.addEventListener('message', (e) => {
