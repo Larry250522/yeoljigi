@@ -1,7 +1,7 @@
 {
   "name": "열지기 — 아이 열날 때",
   "short_name": "열지기",
-  "description": "체온 · 해열제 · 증상 기록, 다음 해열제 시간과 용량 계산",
+  "description": "체온 · 해열제 · 증상 기록, 먹인 약과 시간을 가족과 함께",
   "lang": "ko",
   "start_url": "./",
   "scope": "./",

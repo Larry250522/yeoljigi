@@ -82,7 +82,7 @@ test('저장소를 읽기만 해도 예외가 나는 브라우저 — 멈추지 
   assert.equal(store.isPersistent(), false);
 });
 
-test('가족에게 보낼 글 — 먹인 약과 계열마다 다음 때', () => {
+test('가족에게 보낼 글 — 먹인 약과 계열마다 마지막으로 먹인 때(다음 시각은 적지 않는다)', () => {
   const now = new Date('2026-10-11T14:00:00+09:00');
   const iso = (h) => new Date(now.getTime() - h * 3600_000).toISOString();
   const given = { type: 'med', name: '아세트아미노펜 시럽', ingredient: 'acetaminophen', amount: 6, unit: 'mL', mg: 192, at: iso(0) };
@@ -90,8 +90,9 @@ test('가족에게 보낼 글 — 먹인 약과 계열마다 다음 때', () => 
   const text = doseMessage({ name: '하율', weight: 13 }, given, history, now);
   assert.match(text, /\[하율\] 10\/11 오후 2:00 아세트아미노펜 시럽 6mL 먹였어요 \(아세트아미노펜 192mg\)/);
   assert.match(text, /마지막 체온 39.1℃/);
-  assert.match(text, /아세트아미노펜 계열: 10\/11 오후 6:00부터 \(4시간 간격\)/);
-  assert.match(text, /이부프로펜 계열: 10\/11 오후 4:00부터 \(다른 계열과 2시간\)/);
+  assert.match(text, /아세트아미노펜 계열: 10\/11 오후 2:00 \(24시간 1번\)/);
+  assert.match(text, /이부프로펜 계열: 기록 없음/);
+  assert.doesNotMatch(text, /부터|지금 가능|먹일 수 있는 때/);
   assert.match(text, /마지막 소변 10\/11 오후 1:00/);
   assert.match(text, /오후 2:00 기록 기준/);
 });

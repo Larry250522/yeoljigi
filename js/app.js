@@ -1,8 +1,8 @@
 // 열지기 — 화면 넷(홈 · 기록 · 용량 · 설정)과 처음 쓰는 사람 맞이.
 
 import {
-  GROUPS, HOUR, INGREDIENTS, URINE_TAG, ageLabel, ageRow, ageMonths, ageNotice, alertsFor, careTip, dailyLeft, dailyMaxMg, doseRange,
-  feverEpisode, feverLevel, lastUrine, nextDose, tempTrend,
+  GROUPS, INGREDIENTS, URINE_TAG, ageLabel, ageMonths, ageNotice, alertsFor, careTip,
+  feverEpisode, feverLevel, groupLog, lastUrine, tempTrend,
 } from './dose.js';
 import { chartImage, tempChart } from './chart.js';
 import * as notify from './notify.js';
@@ -12,16 +12,18 @@ import {
 } from './sheets.js';
 import * as store from './store.js';
 import {
-  $, $$, ago, clock, confirmSheet, dayLabel, esc, fmt1, fmtAmount, icon, shareFile, sheet, toast, until,
+  $, $$, ago, clock, confirmSheet, dayLabel, elapsed, esc, fmt1, fmtAmount, icon, shareFile, sheet, toast,
 } from './ui.js';
 import * as env from './env.js';
 
-const VIEWS = { home: '홈', log: '기록', calc: '용량', settings: '설정' };
+const VIEWS = { home: '홈', log: '기록', calc: '약 안내', settings: '설정' };
 const REPO_URL = 'https://github.com/larrykim-dev/yeoljigi';
 const SPONSOR_URL = 'https://github.com/sponsors/larrykim-dev';
+// 식약처 「의료기기와 개인용 건강관리(웰니스)제품 판단기준」 Ⅴ.3 이 권하는 문구 그대로
+const NOT_DEVICE = '본 제품은 의료기기가 아니므로 질병 유무를 판단할 수 없으며, 질병 유무 판단을 위해서는 의사의 검진이 필요합니다.';
 let view = 'home';
 let range = 24;
-let calcState = { medId: null, weight: null };
+const calcState = { medId: null };
 
 const root = $('#app');
 
@@ -30,7 +32,7 @@ function shell(inner, title, actions = '') {
   return `<header class="top"><h1>${esc(title)}</h1><span class="spacer"></span>${actions}</header>
     <main class="main view-enter" id="main" tabindex="-1">${inner}</main>
     <div class="tabs"><nav aria-label="화면">
-      ${tab('home', 'home')}${tab('log', 'list')}${tab('calc', 'calc')}${tab('settings', 'gear')}
+      ${tab('home', 'home')}${tab('log', 'list')}${tab('calc', 'pill')}${tab('settings', 'gear')}
     </nav></div>`;
 }
 const tab = (key, ic) => `<button type="button" data-view="${key}" ${view === key ? 'aria-current="page"' : ''}>${icon(ic)}<span>${VIEWS[key]}</span></button>`;
@@ -104,39 +106,18 @@ function homeView() {
       <div class="muted small">아래 「체온」을 눌러 처음 잰 체온을 남겨 주세요.</div></div></div>`;
   }
 
-  const nexts = Object.fromEntries(Object.values(GROUPS)
-    .map((g) => [g.key, nextDose(g.key, history, now, Number(child.weight) || 0, months)]));
+  // 계열마다 마지막 기록과 지난 시간 — 설명서 간격 · 하루 횟수를 옆에 적고, 먹여도 되는지는 판정하지 않는다
   const doseCards = Object.values(GROUPS).map((g) => {
-    const n = nexts[g.key];
-    // 다른 계열을 먹인 지 얼마 안 됐으면 — 번갈아 먹이기는 계속 힘들어할 때만(NICE 1.6.6)
-    const otherLast = Object.values(nexts).find((x) => x.group !== g.key).last;
-    const alt = n.canNow && otherLast && now - new Date(otherLast.at) < 6 * HOUR;
+    const l = groupLog(g.key, history, now);
     const color = g.key === 'NSAID' ? 'var(--nsaid)' : 'var(--apap)';
-    // 남은 양은 그 계열에서 마지막에 먹인 약(없으면 내 약 중 그 계열 첫 번째)의 단위로 — 종합감기약 단위로는 세지 않는다
-    const solo = (m) => m && !m.combo;
-    const lastMed = n.last && store.get().meds.find((m) => m.id === n.last.medId);
-    const med = (solo(lastMed) && lastMed) || (n.last && n.last.conc && solo(n.last) ? n.last : null)
-      || store.get().meds.find((m) => INGREDIENTS[m.ingredient].group === g.key && solo(m));
-    const left = dailyLeft(g.key, history, now, Number(child.weight) || 0, med, months);
-    let state;
-    let when;
-    if (n.canNow) {
-      state = n.last ? '지금 가능' : '먹인 적 없음';
-      when = alt ? '번갈아 먹이기는 계속 힘들어할 때만' : n.last ? `마지막 ${clock(n.last.at)}` : '지금 먹일 수 있어요';
-    } else {
-      state = `${until(n.at, now)} 뒤`;
-      when = `${clock(n.at)}부터`;
-    }
-    const count = [n.canNow ? '' : n.reason, n.last ? `24시간 ${n.countInDay}/${n.maxPerDay}번` : ''].filter(Boolean).join(' · ');
-    const usedPct = left ? Math.round(left.used * 100) : 0;
-    const leftText = left && left.amount !== undefined
-      ? `남은 양 ${fmtAmount(left.amount)}${med.unit || 'mL'}` : (child.weight ? '' : '몸무게를 넣으면 남은 양도 셉니다');
+    const state = l.last ? `${elapsed(l.last.at, now)} 전` : '기록 없음';
+    const what = l.last ? `마지막 ${clock(l.last.at)} · ${l.last.name || INGREDIENTS[l.last.ingredient].name} ${fmtAmount(l.last.amount)}${
+      l.last.unit || 'mL'}` : '먹인 약을 기록하면 여기 보여요';
     return `<div class="dose" style="--c:${color}"><div class="name">${esc(g.name)}</div>
-      <div class="state num ${n.canNow && n.last ? 'tone-ok' : ''}">${esc(state)}</div>
-      <div class="sub">${esc(when)}</div>${count ? `<div class="sub">${esc(count)}</div>` : ''}
-      ${left ? `<div class="bar" role="img" aria-label="24시간 하루 최대량의 ${usedPct}% 먹임"><i style="width:${usedPct}%"></i></div>
-        <div class="sub" style="margin-top:6px">${leftText ? `<b style="color:var(--text-2)">${esc(leftText)}</b> · ` : ''}하루 양 ${usedPct}%</div>`
-        : `<div class="sub" style="margin-top:6px">${esc(leftText)}</div>`}</div>`;
+      <div class="state num">${esc(state)}</div>
+      <div class="sub">${esc(what)}</div>
+      ${l.last ? `<div class="sub">24시간 ${l.countInDay}번 기록</div>` : ''}
+      <div class="sub label">간격 안내 ${l.intervalH}시간 이상 · 하루 ${l.maxPerDay}번까지</div></div>`;
   }).join('');
 
   const notice = months !== null && months < 3
@@ -154,15 +135,14 @@ function homeView() {
       <button type="button" data-pee><span class="ico bg-mild">${icon('drop')}</span>소변${pee
         ? `<small class="faint">${esc(ago(pee.at, now))}</small>` : ''}</button>
     </div>
-    <section class="card" aria-label="다음 해열제"><h2>다음 해열제<span class="spacer"></span>
+    <section class="card" aria-label="해열제 기록"><h2>해열제 기록<span class="spacer"></span>
       <button class="link" data-help-dose>간격 안내</button></h2>
       <div class="doses">${doseCards}</div>${notice}
-      ${!child.weight ? `<p class="small muted" style="margin:10px 0 0">몸무게를 넣으면 먹일 양도 계산해 드려요.
-        <button class="link btn sm ghost" data-edit-kid style="height:28px">몸무게 넣기</button></p>` : ''}</section>
+      <p class="small muted" style="margin:10px 0 0">다음 약은 포장 설명서의 간격 · 양을 확인하고 먹여 주세요.</p></section>
     <section class="card" aria-label="최근 24시간 그래프"><h2>최근 24시간<span class="spacer"></span>
       <button class="link" data-go="log">전체 기록 ${icon('chev', 14)}</button></h2>${tempChart(history, { hours: 24, now })}</section>
     ${recent.length ? `<div class="section-title">최근 기록</div><div class="rows">${recent.map((e) => rowHtml(e, true)).join('')}</div>` : ''}
-    <p class="small faint" style="text-align:center;margin:18px 8px 0">이 앱은 기록과 계산을 돕는 도구예요. 약은 포장 설명서와
+    <p class="small faint" style="text-align:center;margin:18px 8px 0">이 앱은 기록을 돕는 도구예요. 약은 포장 설명서와
       의사 · 약사의 지시를 먼저 따르세요.</p>`;
   return shell(inner, '열지기', `<button class="icon-btn" data-share aria-label="진료용 요약 보내기">${icon('share')}</button>`);
 }
@@ -170,7 +150,7 @@ function homeView() {
 function welcome() {
   const inner = `${banners()}<div class="hello">${heroArt()}
       <h2>아이 열, 같이 지켜요</h2>
-      <p>체온 · 해열제 · 증상을 한 번에 남기고<br>다음 해열제를 언제, 얼마나 먹일지 알려 드려요.</p>
+      <p>체온 · 해열제 · 증상을 한 번에 남기고<br>언제 무엇을 먹였는지 가족과 함께 봐요.</p>
       <button class="btn primary block" data-add-kid>아이 더하기</button>
       <p class="small faint" style="margin-top:14px">기록은 이 휴대폰에만 저장돼요. 가입하지 않아도 됩니다.</p>
     </div>`;
@@ -226,50 +206,43 @@ function logView() {
   return shell(inner, `${child.name} 기록`, `<button class="icon-btn" data-share aria-label="진료용 요약 보내기">${icon('share')}</button>`);
 }
 
-// ── 용량 계산 ───────────────────────────────
-function calcOutput(med, weight, months) {
-  if (!med || !(Number(weight) > 0)) return '<p class="muted" style="text-align:center;margin:8px 0">몸무게를 넣어 주세요.</p>';
+// ── 약 안내(포장 설명서 내용) ─────────────────
+// 설명서의 용법을 옮겨 보여 줄 뿐, 아이 체중 · 나이로 양을 셈하지 않는다(dose.js 머리말).
+const yearsLabel = (r) => `${r.fromM / 12}~${r.toM / 12 - 1}세`;
+
+function labelOutput(med, months) {
+  if (!med) return '<p class="muted" style="text-align:center;margin:8px 0">설정 → 내 약에서 약을 더해 주세요.</p>';
   const ing = INGREDIENTS[med.ingredient];
-  const r = doseRange(med.ingredient, Number(weight), med.conc, months);
-  if (!r) return '<p class="muted" style="text-align:center;margin:8px 0">몸무게를 확인해 주세요.</p>';
-  if (r.unitTooBig) {
-    return `<div class="check warn">이 약은 체중 ${esc(weight)}kg 아이에게 한 ${esc(med.unit)}가 너무 커요(1회 ${r.mg[0]}~${r.mg[1]}mg).
-      시럽이나 함량이 낮은 약을 쓰고, 의사 · 약사와 상의하세요.</div>`;
-  }
+  const unitText = med.unit === 'mL' ? `1mL에 ${med.conc}mg${med.conc * 5 === Math.round(med.conc * 5) ? ` (5mL에 ${med.conc * 5}mg)` : ''}`
+    : `1개에 ${med.conc}mg`;
   if (med.combo) {
     return `<div class="check info">${esc(med.name)}은(는) 종합감기약이에요. 양은 <b>포장의 나이별 표</b>대로 먹이세요.
-      먹였다면 해열제로 기록해 두면 든 ${esc(ing.name)}을 해열제 간격 · 하루 최대량에 함께 셉니다.</div>`;
+      해열제로 기록해 두면 든 ${esc(ing.name)}을 홈의 해열제 기록에 함께 보여요.</div>
+      <dl class="kv"><dt>함량</dt><dd>${esc(ing.name)} ${esc(unitText)}</dd></dl>`;
   }
   const notice = ageNotice(med.ingredient, months);
-  return `<div class="calc-out"><div class="muted small">${esc(med.name)} · 1회</div>
-      <div class="big num">${fmtAmount(r.amount[0])}~${fmtAmount(r.amount[1])}<small>${esc(med.unit)}</small></div>
-      <div class="muted small">${ing.name} ${r.mg[0]}~${r.mg[1]}mg${r.ageCapped ? ' · 나이별 용량표까지'
-        : r.capped ? ' · 어른 1회 최대량까지' : ''}</div></div>
-    ${notice ? `<div class="check warn">${esc(notice)}</div>` : ''}
-    <dl class="kv"><dt>1회 양</dt><dd>체중 1kg 에 ${ing.mgPerKg[0]}~${ing.mgPerKg[1]}mg</dd>
-      <dt>간격</dt><dd>같은 계열 ${ing.minIntervalH}시간 이상 · 다른 계열과 2시간 이상</dd>
-      <dt>하루</dt><dd>24시간에 ${med.maxPerDay && med.maxPerDay < ing.maxPerDay ? `이 약은 ${med.maxPerDay}번(같은 계열 ${ing.maxPerDay}번)`
-        : `${ing.maxPerDay}번`}까지 · 최대 ${Math.round(dailyMaxMg(med.ingredient, Number(weight), months))}mg</dd>
-      ${ing.ageTable ? `<dt>나이별 표</dt><dd>${months === null ? '생년월일을 넣으면 포장의 나이별 용량표와 견줘 적은 쪽을 보여 드려요'
-        : ageRow(med.ingredient, months) ? '포장의 나이별 용량표와 체중 계산 중 적은 쪽' : '포장 용량표 밖의 나이 — 체중으로만 셈'}</dd>` : ''}
-      <dt>먹이는 나이</dt><dd>보통 생후 ${ing.minAgeMonths}개월부터</dd></dl>`;
-}
-
-function calcContext() {
-  const child = store.activeChild();
-  const meds = store.get().meds;
-  return {
-    meds,
-    med: meds.find((m) => m.id === calcState.medId) || meds[0],
-    weight: calcState.weight ?? child?.weight ?? '',
-    months: child ? ageMonths(child.birth) : null,
-  };
+  // 나이별 표는 mg 그대로, 이 약의 함량으로 바꾼 mL 을 곁에(제품 함량만 쓰는 단위 바꿈)
+  const mL = (mg) => fmtAmount(Math.round((mg / med.conc) * 10) / 10);
+  const inUnit = (r) => (med.unit === 'mL' ? `<br><span class="faint">이 약 ${mL(r.singleMin)}~${mL(r.single)}mL</span>` : '');
+  const table = ing.ageTable ? `<table class="label-table"><thead><tr><th>나이</th><th>1회</th><th>하루 최대</th></tr></thead><tbody>
+      ${ing.ageTable.map((r) => `<tr><td>${yearsLabel(r)}</td><td class="num">${r.singleMin}~${r.single}mg${inUnit(r)}</td>
+        <td class="num">${r.day}mg</td></tr>`).join('')}</tbody></table>
+      <p class="small muted" style="margin:6px 0 0">표에 없는 나이(돌 전 등)는 의사 · 약사와 상의하세요.</p>` : '';
+  return `${notice ? `<div class="check warn">${esc(notice)}</div>` : ''}
+    <dl class="kv"><dt>함량</dt><dd>${esc(ing.name)} ${esc(unitText)}</dd>
+      <dt>1회</dt><dd>${esc(ing.label.single)}</dd>
+      <dt>간격</dt><dd>${esc(ing.label.interval)}</dd>
+      <dt>하루</dt><dd>${esc(ing.label.day)}${med.maxPerDay && med.maxPerDay < ing.maxPerDay
+        ? ` · 이 약은 하루 ${med.maxPerDay}번까지(내 약 설정)` : ''}</dd>
+      <dt>먹이는 나이</dt><dd>보통 생후 ${ing.minAgeMonths}개월부터</dd></dl>${table}`;
 }
 
 function calcView() {
-  const { meds, med, weight, months } = calcContext();
-  const out = calcOutput(med, weight, months);
-  const inner = `<section class="card"><h2>해열제 용량 계산</h2>
+  const child = store.activeChild();
+  const meds = store.get().meds;
+  const med = meds.find((m) => m.id === calcState.medId) || meds[0];
+  const out = labelOutput(med, child ? ageMonths(child.birth) : null);
+  const inner = `<section class="card"><h2>포장 설명서 내용</h2>
       <div class="field"><span>약</span><div class="medpick" role="group" aria-label="약">
         ${meds.map((m) => {
           const ing = INGREDIENTS[m.ingredient];
@@ -277,20 +250,20 @@ function calcView() {
           <span class="sw" style="background:${ing.group === 'NSAID' ? 'var(--nsaid)' : 'var(--apap)'}"></span>
           <span><b>${esc(m.name)}</b><small>${esc(ing.name)} · ${m.unit === 'mL' ? `${esc(m.conc)}mg/mL` : `1개 ${esc(m.conc)}mg`}</small></span></button>`;
         }).join('')}</div></div>
-      <label class="field"><span>몸무게 (kg)</span><input class="input num" type="number" inputmode="decimal" step="0.1" min="2" max="80"
-        data-calc-weight value="${esc(weight)}" placeholder="예: 12.5"></label>
-      <div data-calc-out aria-live="polite">${out}</div></section>
+      <div aria-live="polite">${out}</div>
+      <p class="small muted" style="margin:12px 0 0">국내 허가 사항의 일반적인 내용이에요. 아이에게 먹일 양은 <b>손에 든 약의 포장 설명서</b>
+        (나이 · 체중별 표)와 의사 · 약사의 지시를 따르세요. 이 앱은 양을 계산하지 않아요.</p></section>
     <section class="card prose" aria-label="주의"><h2>꼭 확인하세요</h2>
       <ul><li><b>포장의 함량</b>이 위 약의 함량과 같은지 보세요. 같은 성분도 제품마다 다를 수 있어요(설정 → 내 약에서 고침).</li>
         <li><b>이름이 같아도 성분이 다른 약</b>이 있어요(예: 챔프시럽은 아세트아미노펜, 챔프이부펜시럽은 이부프로펜). 포장의 <b>성분명</b>을 보세요.</li>
         <li><b>종합감기약</b>(챔프콜드펜 · 콜대원키즈콜드에스 등)에도 아세트아미노펜이 들어 있어요. 같이 먹였다면 설정 → 내 약에서
-          그 약을 골라 더하고 해열제로 기록하세요 — 해열제 간격 · 하루 최대량에 함께 셉니다.</li>
+          그 약을 골라 더하고 해열제로 기록하세요 — 홈의 해열제 기록에 함께 보여요.</li>
         <li>현탁액(시럽)은 먹이기 전에 잘 흔드세요.</li>
-        <li>포장 설명서의 <b>나이 · 체중별 용량표</b>와 의사 · 약사의 지시가 이 계산보다 먼저입니다.</li>
         <li>시럽은 계량컵보다 <b>눈금 있는 먹이는 주사기</b>로 재세요 — 잘못 재는 일이 훨씬 적어요.</li>
         <li>두 계열을 한꺼번에 먹이지 마세요. 번갈아 먹이기는 아이가 계속 힘들어할 때만, 의사 · 약사와 상의해서.</li>
-        <li>먹인 약은 꼭 「해열제」로 기록해 두세요 — 다음 먹일 때와 하루 최대량을 셉니다.</li></ul></section>`;
-  return shell(inner, '용량');
+        <li>먹인 약은 꼭 「해열제」로 기록해 두세요 — 다른 보호자도 언제 무엇을 먹였는지 알 수 있어요.</li></ul>
+      <p class="faint small">${esc(NOT_DEVICE)}</p></section>`;
+  return shell(inner, '약 안내');
 }
 
 // ── 설정 ───────────────────────────────────
@@ -311,7 +284,7 @@ function settingsView() {
       <button type="button" class="item" data-add-med>${icon('plus', 20)}<span class="grow">약 더하기</span></button></div>
 
     <div class="section-title">알림</div><div class="list">
-      <label class="item"><span class="grow"><b>다음 해열제 · 체온 다시 재기</b>
+      <label class="item"><span class="grow"><b>해열제 1시간 뒤 체온 다시 재기</b>
         <small>${perm === 'unsupported' ? '이 브라우저는 알림을 지원하지 않아요. 홈 화면에 추가하면 될 수 있어요.'
           : perm === 'denied' ? '알림이 막혀 있어요. 브라우저 · 휴대폰 설정에서 허용해 주세요.'
           : '앱이 열려 있거나 뒤에 남아 있을 때 울려요. 완전히 닫으면 울리지 않아요.'}</small></span>
@@ -385,12 +358,12 @@ function helpDose() {
     <p>수두일 때, 또는 구토 · 설사로 물을 잘 못 먹고 소변이 줄었을 때는 이부프로펜 계열 전에 의사 · 약사와 상의하세요.</p>
     <h3>재는 도구</h3>
     <p>시럽은 계량컵보다 <b>눈금 있는 먹이는 주사기(스포이트)</b>로 재야 덜 틀려요. 「작은술」이 아니라 mL 로 재세요.</p>
-    <h3>이 앱이 세는 것</h3>
-    <p>홈의 「다음 해열제」는 기록한 약으로 계열마다 언제부터 먹일 수 있는지 셉니다(같은 계열 간격 · 다른 계열 2시간 ·
-      24시간 횟수). 기록하지 않은 약은 셀 수 없어요.</p>
+    <h3>이 앱이 보여 주는 것</h3>
+    <p>홈의 「해열제 기록」은 계열마다 마지막으로 먹인 때, 그 뒤로 지난 시간, 24시간 횟수를 보여 줘요. 먹여도 되는지 · 얼마나
+      먹일지는 앱이 정하지 않아요 — 설명서의 간격 · 양과 견주어 보고, 헷갈리면 의사 · 약사에게 물어보세요. 기록하지 않은 약은
+      보이지 않아요.</p>
     <p class="faint small">숫자는 국내 어린이 해열제 포장 설명서의 일반 범위예요. 안내는 NICE 지침 · 미국소아과학회 보고서(2011) ·
-      코크란 검토(2013)를 바탕으로 했어요. 이부프로펜은 생년월일을 넣으면 포장의 나이별 용량표(1~2세 · 3~6세 · 7~10세 · 11~14세)와
-      체중 계산 중 적은 쪽으로 셉니다(포장 표는 1세부터일 수 있어요). 좌약은 하루 횟수가 시럽보다 적은 경우가 많아 설정 → 내 약에
+      코크란 검토(2013) · 식약처 안내(2025)를 바탕으로 했어요. 좌약은 하루 횟수가 시럽보다 적은 경우가 많아 설정 → 내 약에
       「하루 최대 횟수」를 넣어 두세요. 제품 설명서와 의사 · 약사의 지시가 먼저입니다.</p></div>` });
 }
 
@@ -416,12 +389,15 @@ function helpFever() {
 
 function helpAbout() {
   sheet({ title: '열지기', body: `<div class="prose">
-    <p>아이가 열이 날 때 체온 · 해열제 · 증상을 남기고, 다음 해열제를 언제 얼마나 먹일지 계산해 주는 앱이에요.</p>
+    <p>아이가 열이 날 때 체온 · 해열제 · 증상을 남기는 기록장이에요. 먹인 약과 시간을 가족과 나누고, 약의 포장 설명서 내용을
+      함께 보여 줘요. 먹일 양이나 시각을 계산하지는 않아요.</p>
     <h3>기록은 어디에?</h3>
     <p>이 휴대폰의 브라우저에만 저장돼요. 어디로도 보내지 않아요. 그래서 브라우저 기록을 지우거나 휴대폰을 바꾸면 사라질 수 있어요 —
       가끔 설정 → <b>백업 파일 저장</b>을 해 두세요.</p>
     <h3>의료 정보가 아니에요</h3>
-    <p>이 앱은 진단이나 처방을 하지 않아요. 용량 · 간격은 일반적인 범위의 계산이며, 약 포장 설명서와 의사 · 약사의 지시가 먼저입니다.</p>
+    <p>이 앱은 진단이나 처방을 하지 않아요. 용량 · 간격은 포장 설명서의 일반적인 내용이며, 손에 든 약의 설명서와 의사 · 약사의
+      지시가 먼저입니다.</p>
+    <p>${esc(NOT_DEVICE)}</p>
     <h3>누가 만들었나요?</h3>
     <p>개인이 만든 무료 앱이에요. 광고 · 가입이 없고, 코드는 <a href="${REPO_URL}" target="_blank" rel="noopener">GitHub</a>에
       공개돼 있어요(MIT). 제약사 · 약국의 후원은 받지 않아요. 도움이 됐다면 <a href="${SPONSOR_URL}" target="_blank" rel="noopener">응원</a>해 주세요.</p>
@@ -591,14 +567,6 @@ root.addEventListener('change', async (ev) => {
   }
 });
 
-root.addEventListener('input', (ev) => {
-  if (ev.target.matches('[data-calc-weight]')) {
-    calcState.weight = ev.target.value;
-    const { med, weight, months } = calcContext();
-    $('[data-calc-out]').innerHTML = calcOutput(med, weight, months);
-  }
-});
-
 function exportBackup() {
   const blob = new Blob([store.exportJson()], { type: 'application/json' });
   const a = document.createElement('a');
@@ -625,5 +593,3 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 try { navigator.storage?.persist?.(); } catch { /* 저장 공간 오래 두기 요청 — 안 돼도 된다 */ }
-
-export { HOUR };

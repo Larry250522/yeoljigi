@@ -63,7 +63,7 @@ def og() -> Image.Image:
     mid = ImageFont.truetype(FONT, 40, index=2)
     d.text((90, 130), "열지기", font=big, fill=INK)
     d.text((92, 280), "아이 열날 때 — 체온 · 해열제 · 증상", font=mid, fill=(91, 98, 114))
-    d.text((92, 336), "다음 해열제 시간과 용량을 알려 드려요", font=mid, fill=(91, 98, 114))
+    d.text((92, 336), "먹인 약과 시간을 가족과 함께 봐요", font=mid, fill=(91, 98, 114))
     d.rounded_rectangle([90, 430, 520, 500], radius=35, fill=CORAL)
     d.text((126, 444), "가입 없이 · 기록은 내 폰에만", font=ImageFont.truetype(FONT, 32, index=6), fill=(255, 255, 255))
     return im

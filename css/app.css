@@ -173,8 +173,7 @@ button { cursor: pointer; }
 .dose .name { font-size: 13px; font-weight: 700; color: var(--text-2); }
 .dose .state { font-size: 20px; font-weight: 800; margin-top: 4px; letter-spacing: -0.03em; }
 .dose .sub { font-size: 12px; color: var(--text-3); margin-top: 2px; }
-.dose .bar { height: 4px; border-radius: 4px; background: var(--line); margin-top: 10px; overflow: hidden; }
-.dose .bar i { display: block; height: 100%; background: var(--c); border-radius: 4px; }
+.dose .sub.label { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
 
 /* 알림 상자 */
 .alert { border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px; display: flex; gap: 12px; align-items: flex-start; }
@@ -342,9 +341,9 @@ textarea.input { height: 84px; padding: 12px 14px; resize: vertical; }
 .prose ul { margin: 6px 0; padding-left: 18px; }
 .prose li { margin: 3px 0; }
 
-.calc-out { text-align: center; padding: 8px 0 2px; }
-.calc-out .big { font-size: 44px; font-weight: 800; letter-spacing: -0.04em; }
-.calc-out .big small { font-size: 20px; margin-left: 4px; }
+.label-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 14px; }
+.label-table th { text-align: left; font-weight: 600; color: var(--text-3); font-size: 12px; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.label-table td { padding: 8px 4px; border-bottom: 1px solid var(--line); font-weight: 600; }
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 14px; margin-top: 12px; }
 .kv dt { color: var(--text-3); }
 .kv dd { margin: 0; font-weight: 600; }

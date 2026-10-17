@@ -1,7 +1,7 @@
 // 진료용 요약 — 병원에서 의사에게 보여 주거나 카카오톡으로 보낼 글. 최근 72시간.
 
 import {
-  DAY, GROUPS, HOUR, INGREDIENTS, URINE_TAG, ageLabel, ageMonths, feverEpisode, lastUrine, nextDose,
+  DAY, GROUPS, HOUR, INGREDIENTS, URINE_TAG, ageLabel, ageMonths, feverEpisode, groupLog, lastUrine,
 } from './dose.js';
 import { WELLBEING } from './store.js';
 import { clock, fmt1, fmtAmount } from './ui.js';
@@ -55,8 +55,8 @@ export function summary(child, entries, now = new Date(), hours = 72) {
 }
 
 /**
- * 해열제를 먹인 바로 뒤 가족에게 보낼 글 — 무엇을 얼마나 먹였고, 계열마다 다음에 먹일 수 있는 때.
- * 받는 사람이 나중에 읽을 수 있어 「몇 시 기준」을 함께 적는다.
+ * 해열제를 먹인 바로 뒤 가족에게 보낼 글 — 무엇을 얼마나 먹였고, 계열마다 마지막으로 먹인 때(다른 보호자가 또 먹이지 않게).
+ * 다음에 먹일 시각은 적지 않는다(dose.js 머리말). 받는 사람이 나중에 읽을 수 있어 「몇 시 기준」을 함께 적는다.
  */
 export function doseMessage(child, entry, history, now = new Date()) {
   const ing = INGREDIENTS[entry.ingredient];
@@ -64,11 +64,12 @@ export function doseMessage(child, entry, history, now = new Date()) {
     + ` (${ing.name} ${entry.mg}mg)`];
   const temp = history.filter((e) => e.type === 'temp' && new Date(e.at) <= now).sort((a, b) => (a.at < b.at ? 1 : -1))[0];
   if (temp && now - new Date(temp.at) < 12 * HOUR) lines.push(`마지막 체온 ${fmt1(temp.temp)}℃ (${stamp(temp.at)})`);
-  lines.push('', '다음에 먹일 수 있는 때');
+  lines.push('', '계열마다 마지막으로 먹인 때');
   for (const g of Object.values(GROUPS)) {
-    const n = nextDose(g.key, history, now, Number(child.weight) || 0, ageMonths(child.birth, now));
-    lines.push(`- ${g.name}: ${n.canNow ? '지금 가능' : `${stamp(n.at)}부터 (${n.reason})`}`);
+    const l = groupLog(g.key, history, now);
+    lines.push(`- ${g.name}: ${l.last ? `${stamp(l.last.at)} (24시간 ${l.countInDay}번)` : '기록 없음'}`);
   }
+  lines.push('다음 약은 포장 설명서의 간격을 확인하고 먹여 주세요.');
   const pee = lastUrine(history, now);
   if (pee && now - new Date(pee.at) < DAY) lines.push(`마지막 소변 ${stamp(pee.at)}`);
   lines.push('', `${stamp(now)} 기록 기준 · 열지기`);

@@ -1,7 +1,7 @@
 // 기록 창 — 체온 · 해열제 · 증상 · 아이 · 내 약. 아래에서 올라오는 창 하나에 한 가지를 넣는다.
 
 import {
-  GROUPS, INGREDIENTS, PRODUCTS, URGENT_SYMPTOMS, ageMonths, ageNotice, checkDose, doseRange, feverLevel,
+  GROUPS, INGREDIENTS, PRODUCTS, URGENT_SYMPTOMS, ageMonths, ageNotice, checkDose, feverLevel,
 } from './dose.js';
 import { doseMessage } from './report.js';
 import * as store from './store.js';
@@ -51,7 +51,7 @@ function wireWhen(el, onChange) {
 
 /**
  * 저장할 시각. 앞으로의 시각(5분 넘게)은 받지 않고, 5분 안쪽(시계가 조금 다른 휴대폰)은 지금으로 맞춘다 —
- * 지금보다 뒤에 놓인 기록은 계산 · 알림에서 빠져 「먹인 적 없음」으로 보이게 된다.
+ * 지금보다 뒤에 놓인 기록은 홈의 해열제 기록 · 알림에서 빠져 「기록 없음」으로 보이게 된다.
  */
 export function pickWhen(at, now = new Date()) {
   if (Number.isNaN(at.getTime())) return { error: '시각을 확인해 주세요.' };
@@ -207,20 +207,13 @@ export function medSheet(child, entry = null, onSaved) {
     footer: `${deleteBtn(entry)}<button class="btn primary" data-save>저장</button>`,
   });
 
-  const stepOf = () => (med.unit === 'mL' ? 0.5 : 0.5);
-  const recommend = () => {
-    if (med.combo) return 0;                    // 종합감기약 — 포장 표대로 직접 넣는다
-    const r = doseRange(med.ingredient, child.weight, med.conc, months);
-    if (!r) return med.unit === 'mL' ? 5 : 1;
-    // 범위 안의 가운데쯤, 0.5 단위로 내림 — 범위 아래로는 내려가지 않게
-    const mid = Math.floor(((r.amount[0] + r.amount[1]) / 2) * 2) / 2;
-    return Math.max(r.amount[0], Math.min(mid, r.amount[1]));
-  };
+  const stepOf = () => 0.5;
+  // 처음 값은 이 약을 지난번에 먹인 양(기록) — 없으면 0 에서 직접 넣는다(앱이 양을 권하지 않는다)
   const previous = () => {
     const prev = store.entriesOf(child.id).find((e) => e.type === 'med' && e.medId === med.id && e.id !== entry?.id);
     return prev ? Number(prev.amount) : null;
   };
-  if (amount === null) amount = previous() ?? recommend();
+  if (amount === null) amount = previous() ?? 0;
 
   const render = (fromTyping = false) => {
     $$('[data-med]', el).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.med === med.id)));
@@ -228,38 +221,25 @@ export function medSheet(child, entry = null, onSaved) {
     $('[data-unit]', el).textContent = med.unit;
     const mg = Math.round(amount * med.conc);
     $('[data-mg]', el).textContent = `${INGREDIENTS[med.ingredient].name} ${mg}mg (${med.unit === 'mL' ? `${med.conc}mg/mL` : `1개 ${med.conc}mg`})`;
-    const r = doseRange(med.ingredient, child.weight, med.conc, months);
     $('[data-range]', el).innerHTML = med.combo
-      ? `<b>종합감기약</b>은 포장의 나이별 표대로 먹이세요. 앱은 든 ${esc(INGREDIENTS[med.ingredient].name)}만 세어 해열제 간격 · 하루
-         최대량에 넣어요. 다른 성분(코 · 기침약)의 하루 횟수는 포장을 따르세요.`
-      : r && r.unitTooBig
-      ? `이 약은 체중 ${esc(child.weight)}kg 아이에게 한 ${esc(med.unit)}가 너무 커요. 시럽이나 함량이 낮은 약을 쓰고, 의사 · 약사와 상의하세요.`
-      : r
-      ? `체중 ${esc(child.weight)}kg 권장 <b class="num">${fmtAmount(r.amount[0])}~${fmtAmount(r.amount[1])}${esc(med.unit)}</b>
-         <span class="faint">(${r.mg[0]}~${r.mg[1]}mg)</span>
-         <button type="button" class="btn sm ghost" data-fill style="height:30px">권장량 넣기</button>`
-      : '체중을 넣으면 권장량을 알려 드려요. <span class="faint">(설정 → 아이)</span>';
-    const fill = $('[data-fill]', el);
-    if (fill) fill.addEventListener('click', () => { amount = recommend(); render(); });
+      ? `<b>종합감기약</b>은 포장의 나이별 표대로 먹이세요. 든 ${esc(INGREDIENTS[med.ingredient].name)}은 해열제 기록에 함께 보여요.
+         다른 성분(코 · 기침약)의 하루 횟수는 포장을 따르세요.`
+      : '먹인 양을 그대로 넣어 주세요. 먹일 양은 <b>포장 설명서</b>(나이 · 체중별 표)와 의사 · 약사의 지시를 따르세요.';
 
     const at = fromLocalInput($('[name=at]', el).value);
     const history = store.entriesOf(child.id).filter((e) => e.id !== entry?.id);
     // 하루 횟수는 지금 내 약 설정에서(옛 기록을 고칠 때도 같은 약이면)
     const preset = meds.find((m) => m.id === med.id);
-    const res = checkDose({ ingredient: med.ingredient, mg, at, weightKg: Number(child.weight) || 0, history, months,
-      medId: med.id, medMaxPerDay: preset?.maxPerDay || null, combo: Boolean(med.combo),
-      medMinAgeMonths: preset?.minAgeMonths || null });
+    const res = checkDose({ ingredient: med.ingredient, at, history, months,
+      medId: med.id, medMaxPerDay: preset?.maxPerDay || null, medMinAgeMonths: preset?.minAgeMonths || null });
+    // 기록과 설명서를 견준 말만 — 「괜찮다」고도 「안 된다」고도 하지 않고, 저장은 늘 된다(이미 먹인 약이 빠지면 기록이 틀린다)
     $('[data-check]', el).innerHTML = res.messages.length
-      ? `<div class="check ${res.level}">${res.messages.map((m) => `<p>${esc(m.text)}</p>`).join('')}</div>`
-      : '<div class="check ok">간격 · 양 모두 괜찮아요.</div>';
-    const save = $('[data-save]', el);
-    save.textContent = res.level === 'block' ? '그래도 기록' : '저장';
-    save.className = `btn ${res.level === 'block' ? 'danger' : 'primary'}`;
+      ? `<div class="check ${res.level}">${res.messages.map((m) => `<p>${esc(m.text)}</p>`).join('')}</div>` : '';
   };
 
   $$('[data-med]', el).forEach((b) => b.addEventListener('click', () => {
     med = meds.find((m) => m.id === b.dataset.med);
-    amount = previous() ?? recommend();
+    amount = previous() ?? 0;
     render();
   }));
   $$('[data-step]', el).forEach((b) => b.addEventListener('click', () => {
@@ -368,10 +348,10 @@ export function childSheet(child = null, { first = false } = {}) {
         value="${esc(child?.name || '')}" placeholder="예: 하율" ${child ? '' : 'autofocus'}></label>
       <label class="field"><span>생년월일</span><input class="input" type="date" name="birth" value="${esc(child?.birth || '')}"
         max="${toLocalInput(new Date()).slice(0, 10)}">
-        <div class="hint">나이에 따라 먹이면 안 되는 약 · 바로 병원에 가야 할 때를 알려 드려요.</div></label>
+        <div class="hint">포장 설명서의 먹이는 나이 · 바로 병원에 가야 할 때를 함께 알려 드려요.</div></label>
       <label class="field"><span>몸무게 (kg)</span><input class="input num" type="number" name="weight" inputmode="decimal" step="0.1"
         min="2" max="80" value="${esc(child?.weight ?? '')}" placeholder="예: 12.5">
-        <div class="hint">해열제 양은 몸무게로 정합니다. 아플 때마다 최근 몸무게로 고쳐 주세요.${child?.weightAt
+        <div class="hint">진료용 요약에 적어요. 포장 설명서의 체중별 표를 볼 때도 최근 몸무게로 보세요.${child?.weightAt
           ? ` (마지막으로 고친 날 ${esc(child.weightAt.slice(0, 10))})` : ''}</div></label>
       <label class="list" style="box-shadow:none;border:1px solid var(--line)"><span class="item">
         <span class="grow"><b>열성 경련을 한 적 있어요</b><small>진료용 요약에 함께 적어요.</small></span>

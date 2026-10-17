@@ -1,7 +1,9 @@
-// 체온 구간 · 해열제 용량 · 다음 복용 시각 — 화면과 떨어진 순수 계산(시험: tests/dose.test.mjs).
+// 체온 구간 · 해열제 기록 모아 보기 · 포장 설명서 내용 — 화면과 떨어진 순수 함수(시험: tests/dose.test.mjs).
 //
-// 숫자는 국내 어린이 해열제 허가 사항(포장 설명서)의 일반적인 범위다. 제품마다 함량 · 연령 · 체중 표가 다를 수 있어
-// 화면은 늘 「포장 설명서와 의사 · 약사의 지시가 먼저」라고 말한다. 이 파일의 값을 바꾸면 시험도 함께 고친다.
+// 아이마다 먹일 양 · 다음 먹일 시각을 계산하지 않는다(0.7.0). 식약처 디지털의료기기 분류 가이드라인(2025-11)이
+// 「의약품 권장 용량 및 투입주기 등의 결정 보조」를 의료기기 목적으로 적고 있어, 기록(먹인 때 · 횟수)과 포장 설명서
+// 내용(일반 범위)을 나란히 보여 주는 데서 멈춘다. 먹여도 되는지는 보호자가 설명서 · 의사 · 약사와 정한다.
+// 체중 · 나이로 셈하던 판(0.6.1)은 git 09bbd73 에 있다. 이 파일의 값을 바꾸면 시험도 함께 고친다.
 
 export const HOUR = 3600_000;
 export const DAY = 24 * HOUR;
@@ -15,35 +17,35 @@ export const GROUPS = {
 // 다른 계열을 번갈아 먹일 때(교차 복용) 앞 약과 최소 간격
 export const CROSS_MIN_HOURS = 2;
 
+// label: 포장 설명서(허가 사항)의 용법을 화면에 그대로 옮길 말 — 아이 체중 · 나이를 넣어 셈하지 않는다.
+// minIntervalH · maxPerDay 는 기록과 견줄 때(「같은 계열 기록이 ○시간 전에 있어요 · 간격 안내 ○시간 이상」) 쓴다.
 export const INGREDIENTS = {
   acetaminophen: {
     id: 'acetaminophen', name: '아세트아미노펜', group: 'APAP',
-    mgPerKg: [10, 15], minIntervalH: 4, maxPerDay: 5, maxMgPerKgDay: 75, maxSingleMg: 1000, maxMgDay: 4000,
-    minAgeMonths: 4, defaultConc: 32,
+    minIntervalH: 4, maxPerDay: 5, minAgeMonths: 4, defaultConc: 32,
+    // 어린이타이레놀현탁액 등 허가: 「1회 10~15mg/kg」 · 「4-6시간 마다」 · 「1일 5회(75mg/kg)를 초과하지 않는다」
+    label: { single: '체중 1kg에 10~15mg', day: '하루 5번까지 · 하루 합계 체중 1kg에 75mg 넘지 않게', interval: '4~6시간마다' },
   },
   ibuprofen: {
     id: 'ibuprofen', name: '이부프로펜', group: 'NSAID',
-    mgPerKg: [5, 10], minIntervalH: 6, maxPerDay: 4, maxMgPerKgDay: 40, maxSingleMg: 400, maxMgDay: 1200,
-    // 30kg 미만 소아 하루 500mg — 라미돈시럽(199301642, 2018 취하) 허가 「체중이 30kg미만인 어린이는 1일량이 500mg(25ml)을
-    // 초과해서는 안되며」. 지금 허가된 시럽(부루펜 · 챔프이부펜 · 콜대원키즈이부펜 · 키즈앤펜)은 이 문장 대신 아래 나이별 표를 쓴다.
-    // 빼면 느슨해지는 쪽이라(3~6세 600mg 등) 더 보수적인 상한으로 남겨 둔다(2026-10-11 nedrug 대조)
-    childDayCap: { underKg: 30, mg: 500 },
-    // 시럽 허가 용량표(어린이부루펜시럽 nedrug 198601920 등 — 나이별 1회 · 1일 최대). 체중 계산과 둘 중 적은 쪽을 쓴다.
-    // 표 밖(돌 전 · 만 15세부터)이거나 생년월일을 모르면 체중 계산만
+    minIntervalH: 6, maxPerDay: 4, minAgeMonths: 6, defaultConc: 20,
+    // 지금 허가된 시럽(어린이부루펜 nedrug 198601920 · 챔프이부펜 · 콜대원키즈이부펜 · 키즈앤펜)은 mg/kg 대신 나이별 표.
+    // 간격은 식약처 2025-12 안내 「6~8시간」
+    label: { single: '포장의 나이별 표', day: '하루 4번까지 · 나이별 하루 최대량', interval: '6~8시간(식약처 안내)' },
     ageTable: [
-      { fromM: 12, toM: 36, single: 100, day: 400 },     // 1~2세 1회 50~100mg
-      { fromM: 36, toM: 84, single: 150, day: 600 },     // 3~6세 100~150mg
-      { fromM: 84, toM: 132, single: 200, day: 800 },    // 7~10세 150~200mg
-      { fromM: 132, toM: 180, single: 250, day: 1000 },  // 11~14세 200~250mg
+      { fromM: 12, toM: 36, singleMin: 50, single: 100, day: 400 },     // 1~2세
+      { fromM: 36, toM: 84, singleMin: 100, single: 150, day: 600 },    // 3~6세
+      { fromM: 84, toM: 132, singleMin: 150, single: 200, day: 800 },   // 7~10세
+      { fromM: 132, toM: 180, singleMin: 200, single: 250, day: 1000 }, // 11~14세
     ],
-    minAgeMonths: 6, defaultConc: 20,
   },
   dexibuprofen: {
     id: 'dexibuprofen', name: '덱시부프로펜', group: 'NSAID',
-    mgPerKg: [5, 7], minIntervalH: 6, maxPerDay: 4, maxMgPerKgDay: 28, maxSingleMg: 300, maxMgDay: 1200,
-    // 맥시부펜 시럽 허가: 1회 5~7mg/kg, 1일 최대 4회(28mg/kg) · 체중 30kg 이하 소아는 1일 최대 25mL(덱시부프로펜 300mg)
-    childDayCap: { underKg: 30, mg: 300, inclusive: true },
-    minAgeMonths: 6, defaultConc: 12,
+    minIntervalH: 6, maxPerDay: 4, minAgeMonths: 6, defaultConc: 12,
+    // 맥시부펜시럽 허가: 1회 5~7mg/kg, 1일 최대 4회(28mg/kg) · 체중 30kg 이하 소아는 1일 최대 25mL(300mg, 한미 제품 안내).
+    // 허가 간격은 4~6시간이지만 같은 계열이라 식약처 2025-12 안내 「6~8시간」을 함께 적는다
+    label: { single: '체중 1kg에 5~7mg', day: '하루 4번까지 · 하루 합계 체중 1kg에 28mg, 체중 30kg 이하는 300mg 넘지 않게',
+      interval: '6~8시간(식약처 안내)' },
   },
 };
 
@@ -103,8 +105,6 @@ export function feverLevel(temp) {
 
 const ms = (at) => (at instanceof Date ? at.getTime() : new Date(at).getTime());
 const round1 = (n) => Math.round(n * 10) / 10;
-const floor1 = (n) => Math.floor(n * 10 + 1e-9) / 10;
-const ceil1 = (n) => Math.ceil(n * 10 - 1e-9) / 10;
 
 /** 태어난 날부터 지금까지 만 개월 수. 모르면 null. */
 export function ageMonths(birth, now = new Date()) {
@@ -125,48 +125,6 @@ export function ageLabel(months) {
   return `${Math.floor(months / 12)}세${months % 12 ? ` ${months % 12}개월` : ''}`;
 }
 
-/** 나이별 용량표의 줄(이부프로펜 시럽). 표가 없거나 나이를 모르면 null. */
-export function ageRow(ingredientId, months) {
-  const table = INGREDIENTS[ingredientId]?.ageTable;
-  if (!table || months === null || months === undefined) return null;
-  return table.find((r) => months >= r.fromM && months < r.toM) || null;
-}
-
-/**
- * 1회 용량 범위. conc 는 한 단위(mL 또는 1개)의 mg. months 를 주면 나이별 용량표와 둘 중 적은 쪽.
- * 아래 끝은 올리고 위 끝은 내린다(위 끝을 넘지 않게). 1회 최대량(어른 용량)을 넘지 않는다.
- */
-export function doseRange(ingredientId, weightKg, conc, months = null) {
-  const ing = INGREDIENTS[ingredientId];
-  const w = Number(weightKg);
-  const c = Number(conc);
-  if (!ing || !(w > 0) || !(c > 0)) return null;
-  const row = ageRow(ingredientId, months);
-  const hiMg = Math.min(ing.mgPerKg[1] * w, ing.maxSingleMg, row ? row.single : Infinity);
-  const loMg = Math.min(ing.mgPerKg[0] * w, hiMg);
-  const hi = floor1(hiMg / c);
-  // 한 단위가 범위보다 크면(가벼운 아이에 큰 알약) 아래 끝이 위 끝을 넘는다 — 위 끝으로 맞추고 알린다
-  const lo = Math.min(ceil1(loMg / c), hi);
-  return {
-    mg: [Math.ceil(loMg), Math.floor(hiMg)],
-    amount: [lo, hi],
-    capped: ing.mgPerKg[1] * w > ing.maxSingleMg,
-    ageCapped: Boolean(row) && ing.mgPerKg[1] * w > row.single && row.single < ing.maxSingleMg,
-    unitTooBig: hi <= 0 || ceil1(loMg / c) > hi,
-  };
-}
-
-/** 하루(24시간) 최대 mg — 체중 기준, 어른 하루 최대량을 넘지 않게. months 를 주면 나이별 용량표와 둘 중 적은 쪽. */
-export function dailyMaxMg(ingredientId, weightKg, months = null) {
-  const ing = INGREDIENTS[ingredientId];
-  if (!ing || !(weightKg > 0)) return null;
-  const row = ageRow(ingredientId, months);
-  let cap = row ? Math.min(ing.maxMgDay, row.day) : ing.maxMgDay;
-  const child = ing.childDayCap;
-  if (child && (child.inclusive ? weightKg <= child.underKg : weightKg < child.underKg)) cap = Math.min(cap, child.mg);
-  return Math.min(ing.maxMgPerKgDay * weightKg, cap);
-}
-
 export function ageNotice(ingredientId, months) {
   const ing = INGREDIENTS[ingredientId];
   if (!ing || months === null || months === undefined) return '';
@@ -182,32 +140,6 @@ function medsOf(history, before = null) {
   return history
     .filter((e) => e.type === 'med' && INGREDIENTS[e.ingredient] && Number.isFinite(ms(e.at)) && ms(e.at) <= until)
     .sort((a, b) => ms(a.at) - ms(b.at));
-}
-
-const shareOf = (e, weightKg, months = null) => (Number(e.mg) || 0) / (dailyMaxMg(e.ingredient, weightKg, months) || Infinity);
-
-/** 24시간 안 같은 계열의 하루 최대량 대비 비율 합(이부프로펜 · 덱시부프로펜을 함께 세려고 비율로 더한다). */
-function dailyShare(group, meds, at, weightKg, months) {
-  const from = ms(at) - DAY;
-  return meds
-    .filter((e) => INGREDIENTS[e.ingredient].group === group && ms(e.at) > from)
-    .reduce((sum, e) => sum + shareOf(e, weightKg, months), 0);
-}
-
-/**
- * 24시간 동안 이 계열을 하루 최대량의 몇 % 먹였고, 이 약으로 얼마나 더 먹일 수 있나(직전 24시간 — 자정에 다시 세지 않는다).
- * med: { ingredient, conc } — 남은 양을 그 약의 단위(mL · 개)로 바꿀 때. 체중을 모르면 null.
- */
-export function dailyLeft(group, history, now, weightKg, med, months = null) {
-  if (!(weightKg > 0)) return null;
-  const used = dailyShare(group, medsOf(history, now), now, weightKg, months);
-  const left = Math.max(0, 1 - used);
-  const out = { used: Math.min(1, used), left };
-  if (med && INGREDIENTS[med.ingredient] && INGREDIENTS[med.ingredient].group === group && med.conc > 0) {
-    out.mg = Math.floor(left * dailyMaxMg(med.ingredient, weightKg, months));
-    out.amount = floor1(out.mg / med.conc);
-  }
-  return out;
 }
 
 /** 지금 체온에 맞춘 한 줄 안내 — 처방이 아니라 집에서 살필 것. */
@@ -226,23 +158,22 @@ export function careTip(temp) {
 }
 
 /**
- * 이 약을 이 시각에 먹여도 되는지.
- * level: ok | info | warn | block. messages: 화면에 그대로 보일 말.
+ * 이 약을 이 시각으로 기록할 때 함께 볼 것 — 기록(앞뒤 같은 계열 · 24시간 횟수)과 설명서 내용을 나란히 적을 뿐,
+ * 먹여도 되는지 판정하지 않고 저장도 막지 않는다(이미 먹인 약이 빠지면 기록이 틀린다).
+ * level: ok | info | warn. messages: 화면에 그대로 보일 말.
  */
 export function checkDose({
-  ingredient, mg, at = new Date(), weightKg, history = [], months = null, medId = null, medMaxPerDay = null, combo = false,
-  medMinAgeMonths = null,
+  ingredient, at = new Date(), history = [], months = null, medId = null, medMaxPerDay = null, medMinAgeMonths = null,
 }) {
   const ing = INGREDIENTS[ingredient];
   const out = { level: 'ok', messages: [] };
   const raise = (level, text) => {
-    const order = ['ok', 'info', 'warn', 'block'];
+    const order = ['ok', 'info', 'warn'];
     if (order.indexOf(level) > order.indexOf(out.level)) out.level = level;
     out.messages.push({ level, text });
   };
   if (!ing) return out;
   const when = ms(at);
-  const dose = Number(mg) || 0;
 
   const age = ageNotice(ingredient, months);
   if (age) raise('warn', age);
@@ -252,7 +183,7 @@ export function checkDose({
     raise('warn', `이 약은 포장에 ${from}부터라고 적혀 있어요. 먹이기 전에 의사 · 약사와 상의하세요.`);
   }
 
-  // 38℃ 아래에서 먹이는 일이 흔하다(열나요 사용자 자료: Park 2021 JMIR mHealth) — 막지 않고 한 줄만
+  // 38℃ 아래에서 먹이는 일이 흔하다(열나요 사용자 자료: Park 2021 JMIR mHealth) — 한 줄만
   const lastTemp = history.filter((e) => e.type === 'temp' && ms(e.at) <= when && ms(e.at) > when - 2 * HOUR)
     .sort((a, b) => ms(b.at) - ms(a.at))[0];
   if (lastTemp && Number(lastTemp.temp) < FEVER_AT) {
@@ -271,18 +202,6 @@ export function checkDose({
     }
   }
 
-  if (weightKg > 0 && dose > 0) {
-    const range = doseRange(ingredient, weightKg, 1, months);
-    // 5% 는 mL 반올림 여유 — 어른 1회 최대량에는 여유를 두지 않는다
-    const limit = Math.min(range.mg[1] * 1.05, ing.maxSingleMg);
-    const basis = range.ageCapped ? `체중 ${weightKg}kg · 나이별 용량표 기준` : `체중 ${weightKg}kg 기준`;
-    if (dose > limit) raise('block', `1회 최대 ${range.mg[1]}mg(${basis})을 넘습니다.`);
-    // 종합감기약은 포장의 나이별 표대로 먹인다 — 든 아세트아미노펜이 해열제 1회 양보다 적은 것이 보통이라 알리지 않는다
-    else if (!combo && dose < range.mg[0] * 0.8) raise('info', `권장량(${range.mg[0]}~${range.mg[1]}mg)보다 적습니다.`);
-  } else if (!(weightKg > 0)) {
-    raise('info', '체중을 넣으면 용량을 확인해 드려요.');
-  }
-
   // 앞뒤를 모두 본다 — 나중에 지난 시각으로 넣는 기록(새벽에 먹인 것을 아침에)도 있다
   const meds = medsOf(history);
   const same = meds.filter((e) => INGREDIENTS[e.ingredient].group === ing.group);
@@ -295,12 +214,12 @@ export function checkDose({
   if (prev) {
     const gapH = (when - ms(prev.at)) / HOUR;
     const need = INGREDIENTS[prev.ingredient].minIntervalH;
-    if (gapH < need) raise('block', `같은 계열 약을 ${fmtGap(gapH)} 전에 먹였습니다. ${need}시간 간격을 지켜 주세요.`);
+    if (gapH < need) raise('warn', `같은 계열 약 기록이 ${fmtGap(gapH)} 전에 있어요. 간격 안내는 ${need}시간 이상이에요.`);
   }
   if (next) {
     const gapH = (ms(next.at) - when) / HOUR;
     if (gapH < ing.minIntervalH) {
-      raise('block', `이 시각 ${fmtGap(gapH)} 뒤에 같은 계열 약 기록이 있습니다. ${ing.minIntervalH}시간 간격이 안 됩니다.`);
+      raise('warn', `이 시각 ${fmtGap(gapH)} 뒤에 같은 계열 약 기록이 있어요. 간격 안내는 ${ing.minIntervalH}시간 이상이에요.`);
     }
   }
   const near = other.map((e) => ({ e, gapH: (when - ms(e.at)) / HOUR }))
@@ -308,79 +227,44 @@ export function checkDose({
     .sort((x, y) => Math.abs(x.gapH) - Math.abs(y.gapH))[0];
   if (near) {
     const where = near.gapH >= 0 ? `${fmtGap(near.gapH)} 전에` : `${fmtGap(-near.gapH)} 뒤에`;
-    raise('warn', `다른 계열 약을 ${where} 먹였습니다. 번갈아 먹일 때도 ${CROSS_MIN_HOURS}시간은 띄우세요.`);
+    raise('warn', `다른 계열 약 기록이 ${where} 있어요. 번갈아 먹이기는 의사 · 약사와 상의하세요.`);
   }
 
-  // 24시간 창 — 이 약이 들어가는 모든 창(끝이 이 시각부터 24시간 뒤까지) 가운데 가장 많은 것
-  const mine = { ingredient, mg: dose, at: new Date(when).toISOString(), medId };
+  // 24시간 창 — 이 기록이 들어가는 모든 창(끝이 이 시각부터 24시간 뒤까지) 가운데 가장 많은 것
+  const mine = { ingredient, at: new Date(when).toISOString(), medId };
   const all = [...same, mine].sort((x, y) => ms(x.at) - ms(y.at));
   const ends = [when, ...after.map((e) => ms(e.at)).filter((t) => t < when + DAY)];
   let worstCount = 0;
   let worstMedCount = 0;
-  let worstShare = 0;
   for (const end of ends) {
     const inWin = all.filter((e) => ms(e.at) > end - DAY && ms(e.at) <= end);
     worstCount = Math.max(worstCount, inWin.length);
     if (medId) worstMedCount = Math.max(worstMedCount, inWin.filter((e) => e.medId === medId).length);
-    if (weightKg > 0) worstShare = Math.max(worstShare, inWin.reduce((sum, e) => sum + shareOf(e, weightKg, months), 0));
   }
-  if (worstCount > ing.maxPerDay) raise('block', `24시간 안 ${worstCount}번째입니다. 하루 ${ing.maxPerDay}번까지입니다.`);
-  // 제품마다 하루 횟수가 더 적을 수 있다(복합써스펜좌약 「1일 2~3회」) — 내 약에 적어 둔 횟수
-  else if (medMaxPerDay > 0 && worstMedCount > medMaxPerDay) {
-    raise('block', `이 약은 하루 ${medMaxPerDay}번까지예요(내 약 설정). 24시간 안 ${worstMedCount}번째입니다.`);
+  if (worstCount > ing.maxPerDay) {
+    raise('warn', `24시간 안 같은 계열 ${worstCount}번째 기록이에요. 설명서는 하루 ${ing.maxPerDay}번까지예요.`);
+  } else if (medMaxPerDay > 0 && worstMedCount > medMaxPerDay) {
+    // 제품마다 하루 횟수가 더 적을 수 있다(복합써스펜좌약 「1일 2~3회」) — 내 약에 적어 둔 횟수
+    raise('warn', `24시간 안 이 약 ${worstMedCount}번째 기록이에요. 내 약 설정은 하루 ${medMaxPerDay}번까지예요.`);
   }
-  if (weightKg > 0 && dose > 0 && worstShare > 1.0001) raise('block', '24시간 동안 먹인 양이 하루 최대량을 넘습니다.');
   return out;
 }
 
 /**
- * 계열마다 다음에 먹일 수 있는 때.
- * { group, last, canNow, at(Date|null), reason, countInDay, maxPerDay }
- * weightKg 를 주면 하루 최대량도 본다 — 남은 양이 가장 적은 1회 양보다 적으면, 오래된 약이 24시간 밖으로 나가는 때까지.
+ * 계열마다 기록 모아 보기 — 마지막으로 먹인 기록 · 지난 시간 · 직전 24시간 횟수(자정에 다시 세지 않는다),
+ * 그리고 견줘 볼 간격 안내 · 하루 횟수. 다음에 먹일 시각은 내지 않는다.
  */
-export function nextDose(group, history, now = new Date(), weightKg = 0, months = null) {
-  const meds = medsOf(history, now);
-  const same = meds.filter((e) => INGREDIENTS[e.ingredient].group === group);
-  const other = meds.filter((e) => INGREDIENTS[e.ingredient].group !== group);
-  const last = same[same.length - 1] || null;
+export function groupLog(group, history, now = new Date()) {
   const nowMs = ms(now);
-  const result = { group, last, canNow: true, at: null, reason: '', countInDay: 0, maxPerDay: 0 };
-  const candidates = [];
-
-  if (last) {
-    const ing = INGREDIENTS[last.ingredient];
-    candidates.push({ at: ms(last.at) + ing.minIntervalH * HOUR, reason: `${ing.minIntervalH}시간 간격` });
-    const recent = same.filter((e) => ms(e.at) > nowMs - DAY);
-    result.countInDay = recent.length;
-    result.maxPerDay = ing.maxPerDay;
-    if (recent.length >= ing.maxPerDay) {
-      candidates.push({ at: ms(recent[recent.length - ing.maxPerDay].at) + DAY, reason: `하루 ${ing.maxPerDay}번` });
-    }
-    if (weightKg > 0 && recent.length) {
-      const range = doseRange(ing.id, weightKg, 1, months);
-      const need = shareOf({ ingredient: ing.id, mg: range.mg[0] }, weightKg, months);
-      let used = recent.reduce((sum, e) => sum + shareOf(e, weightKg, months), 0);
-      if (1 - used < need - 1e-9) {
-        for (const e of recent) {              // 오래된 것부터 창 밖으로
-          used -= shareOf(e, weightKg, months);
-          if (1 - used >= need - 1e-9) {
-            candidates.push({ at: ms(e.at) + DAY, reason: '하루 최대량' });
-            break;
-          }
-        }
-      }
-    }
-  }
-  const lastOther = other[other.length - 1];
-  if (lastOther) candidates.push({ at: ms(lastOther.at) + CROSS_MIN_HOURS * HOUR, reason: '다른 계열과 2시간' });
-
-  const latest = candidates.filter((c) => c.at > nowMs).sort((a, b) => b.at - a.at)[0];
-  if (latest) {
-    result.canNow = false;
-    result.at = new Date(latest.at);
-    result.reason = latest.reason;
-  }
-  return result;
+  const same = medsOf(history, now).filter((e) => INGREDIENTS[e.ingredient].group === group);
+  const last = same[same.length - 1] || null;
+  const ing = last ? INGREDIENTS[last.ingredient] : Object.values(INGREDIENTS).find((i) => i.group === group);
+  return {
+    group, last,
+    sinceH: last ? (nowMs - ms(last.at)) / HOUR : null,
+    countInDay: same.filter((e) => ms(e.at) > nowMs - DAY).length,
+    intervalH: ing.minIntervalH, maxPerDay: ing.maxPerDay,
+  };
 }
 
 function fmtGap(hours) {

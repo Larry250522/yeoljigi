@@ -36,10 +36,13 @@ export function ago(at, now = new Date()) {
   return `${Math.floor(h / 24)}일 전`;
 }
 
-export function until(at, now = new Date()) {
-  const mins = Math.max(0, Math.ceil((new Date(at) - new Date(now)) / 60000));
+/** 그 뒤로 지난 시간 — 내림(실제보다 길게 말하지 않게). 이틀이 넘으면 날로. */
+export function elapsed(at, now = new Date()) {
+  const mins = Math.max(0, Math.floor((new Date(now) - new Date(at)) / 60000));
   if (mins < 60) return `${mins}분`;
-  return `${Math.floor(mins / 60)}시간${mins % 60 ? ` ${mins % 60}분` : ''}`;
+  const h = Math.floor(mins / 60);
+  if (h >= 48) return `${Math.floor(h / 24)}일`;
+  return `${h}시간${mins % 60 ? ` ${mins % 60}분` : ''}`;
 }
 
 /** <input type="datetime-local"> 값 ↔ Date */
