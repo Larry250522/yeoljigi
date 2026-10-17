@@ -17,6 +17,8 @@ import {
 import * as env from './env.js';
 
 const VIEWS = { home: '홈', log: '기록', calc: '용량', settings: '설정' };
+const REPO_URL = 'https://github.com/larrykim-dev/yeoljigi';
+const SPONSOR_URL = 'https://github.com/sponsors/larrykim-dev';
 let view = 'home';
 let range = 24;
 let calcState = { medId: null, weight: null };
@@ -334,7 +336,9 @@ function settingsView() {
       <button type="button" class="item" data-help-dose>${icon('info', 20)}<span class="grow"><b>해열제 간격 · 교차 복용</b></span>${icon('chev', 18)}</button>
       <button type="button" class="item" data-help-fever>${icon('therm', 20)}<span class="grow"><b>열, 겁내지 않아도 돼요</b></span>${icon('chev', 18)}</button>
       <button type="button" class="item" data-help-about>${icon('info', 20)}<span class="grow"><b>이 앱에 대해</b>
-        <small>판 ${esc(env.VERSION)}</small></span>${icon('chev', 18)}</button></div>`;
+        <small>판 ${esc(env.VERSION)}</small></span>${icon('chev', 18)}</button>
+      <a class="item" href="${SPONSOR_URL}" target="_blank" rel="noopener">${icon('heart', 20)}<span class="grow"><b>만든 사람 응원하기</b>
+        <small>무료 · 광고 없이 이어 가게 — GitHub Sponsors</small></span>${icon('external', 18)}</a></div>`;
   return shell(inner, '설정');
 }
 
@@ -418,6 +422,9 @@ function helpAbout() {
       가끔 설정 → <b>백업 파일 저장</b>을 해 두세요.</p>
     <h3>의료 정보가 아니에요</h3>
     <p>이 앱은 진단이나 처방을 하지 않아요. 용량 · 간격은 일반적인 범위의 계산이며, 약 포장 설명서와 의사 · 약사의 지시가 먼저입니다.</p>
+    <h3>누가 만들었나요?</h3>
+    <p>개인이 만든 무료 앱이에요. 광고 · 가입이 없고, 코드는 <a href="${REPO_URL}" target="_blank" rel="noopener">GitHub</a>에
+      공개돼 있어요(MIT). 제약사 · 약국의 후원은 받지 않아요. 도움이 됐다면 <a href="${SPONSOR_URL}" target="_blank" rel="noopener">응원</a>해 주세요.</p>
     <p class="faint small">판 ${esc(env.VERSION)}</p></div>` });
 }
 

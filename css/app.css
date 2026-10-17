@@ -327,6 +327,7 @@ textarea.input { height: 84px; padding: 12px 14px; resize: vertical; }
 .list { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 14px; }
 .list .item { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--line); width: 100%; background: none; border-left: 0; border-right: 0; border-bottom: 0; text-align: left; }
 .list .item:first-child { border-top: 0; }
+.list a.item { color: inherit; text-decoration: none; box-sizing: border-box; }
 .list .item .grow { flex: 1; min-width: 0; }
 .list .item .grow small { display: block; color: var(--text-3); font-size: 13px; }
 .section-title { font-size: 13px; font-weight: 800; color: var(--text-3); margin: 20px 4px 8px; }
@@ -336,6 +337,7 @@ textarea.input { height: 84px; padding: 12px 14px; resize: vertical; }
 .switch:checked::after { transform: translateX(20px); }
 
 .prose { font-size: 14px; color: var(--text-2); }
+.prose a { color: var(--info); }
 .prose h3 { font-size: 15px; color: var(--text); margin: 14px 0 6px; }
 .prose ul { margin: 6px 0; padding-left: 18px; }
 .prose li { margin: 3px 0; }
