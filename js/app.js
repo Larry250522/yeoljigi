@@ -17,7 +17,7 @@ import {
 import * as env from './env.js';
 
 const VIEWS = { home: '홈', log: '기록', calc: '약 안내', settings: '설정' };
-const REPO_URL = 'https://github.com/larrykim-dev/yeoljigi';
+const REPO_URL = 'https://github.com/yeoljigi/yeoljigi.github.io';
 const SPONSOR_URL = 'https://github.com/sponsors/larrykim-dev';
 // 식약처 「의료기기와 개인용 건강관리(웰니스)제품 판단기준」 Ⅴ.3 이 권하는 문구 그대로
 const NOT_DEVICE = '본 제품은 의료기기가 아니므로 질병 유무를 판단할 수 없으며, 질병 유무 판단을 위해서는 의사의 검진이 필요합니다.';

@@ -35,8 +35,10 @@
 
 처음 만든 대화는 「국책마스터」 저장소의 대화 안에서였다. 이 프로젝트는 여기(이 폴더에서 연 Claude 대화)에서 이어 간다.
 
-- **배포**: GitHub `larrykim-dev/yeoljigi`(공개) → GitHub Pages `https://larrykim-dev.github.io/yeoljigi/` (main 루트).
-  2026-10 계정 이름이 Larry250522 에서 바뀌어 옛 Pages 주소는 404 — 예전에 나눈 링크는 다시 보내야 한다.
+- **배포**: GitHub 조직 `yeoljigi` 의 `yeoljigi/yeoljigi.github.io`(공개) → GitHub Pages `https://yeoljigi.github.io/` (main 루트).
+  주소 내력: `larry250522.github.io/yeoljigi`(계정 이름 바뀜 → 404) → `larrykim-dev.github.io/yeoljigi`(2026-10-17 조직으로 옮김) →
+  지금. 기록은 주소(origin)마다 따로라, 옛 주소 `larrykim-dev/yeoljigi` 저장소에 「옮김 안내 · 백업 받기」 페이지를 둔다.
+  후원은 개인 계정 그대로(`FUNDING.yml` github: larrykim-dev).
   push 하면 몇 분 뒤 바뀐다. 사용자에게 카카오톡 링크로 나눈다. 커밋 · push 는 사용자가 시킬 때만.
 - **한 것**: 홈 · 기록 · 용량 · 설정, 체온 · 해열제 · 증상 창, 계열별 다음 복용 · 24시간 남은 양, 진료용 요약, 백업, 다크 모드,
   카카오톡 안 브라우저 → 기본 브라우저 넘기기, 링크 미리보기(og.png 1200×600).

@@ -1,6 +1,6 @@
 # 열지기
 
-**주소: https://larrykim-dev.github.io/yeoljigi/** (GitHub Pages — main 에 push 하면 몇 분 뒤 바뀐다)
+**주소: https://yeoljigi.github.io/** (GitHub Pages — main 에 push 하면 몇 분 뒤 바뀐다)
 
 아이가 열날 때 쓰는 기록장 웹앱(PWA). 체온 · 해열제 · 증상을 남기고, 계열마다 **마지막으로 먹인 때 · 24시간 횟수**를
 포장 설명서 내용과 나란히 보여 줍니다. 먹일 양 · 시각은 **계산하지 않습니다**(아래 「계산하지 않는 이유」). 가입 없이, 기록은

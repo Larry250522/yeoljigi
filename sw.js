@@ -1,7 +1,7 @@
 // 오프라인 — 앱 껍데기는 먼저 캐시에서, 새 판이 올라오면 다음에 열 때 바뀐다.
 // 판을 올릴 때 CACHE 이름(js/env.js 의 VERSION 과 같게)을 바꾼다.
 
-const CACHE = 'yeoljigi-0.7.0';
+const CACHE = 'yeoljigi-0.7.1';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/chart.js', 'js/dose.js', 'js/env.js', 'js/notify.js', 'js/report.js', 'js/sheets.js', 'js/store.js', 'js/ui.js',
