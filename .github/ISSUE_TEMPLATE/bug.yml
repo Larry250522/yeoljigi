@@ -1,0 +1,24 @@
+name: 고장 · 이상한 점
+description: 화면이 깨지거나, 기록이 사라지거나, 안내가 틀린 것 같을 때
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: 아이 이름 · 생년월일 · 백업 파일처럼 **개인 정보는 올리지 마세요.** 이슈는 누구나 볼 수 있어요.
+  - type: textarea
+    id: what
+    attributes:
+      label: 무엇이 일어났나요
+      description: 무엇을 눌렀고, 무엇을 기대했고, 실제로 어땠는지
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: 휴대폰 · 브라우저
+      placeholder: 예) 갤럭시 S24 · 삼성 인터넷 / 아이폰 15 · 홈 화면에 추가한 앱
+  - type: input
+    id: version
+    attributes:
+      label: 판
+      description: 설정 → 이 앱에 대해 아래 「판 0.7.1」

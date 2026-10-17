@@ -1,0 +1,30 @@
+name: 제품 더하기 · 고치기
+description: 내 약 목록(국내 어린이 해열제)에 없는 제품, 또는 성분 · 함량이 틀린 제품
+labels: [product]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        목록에는 **허가 원문으로 성분 · 함량을 확인한 제품만** 넣어요. 의약품안전나라(nedrug.mfds.go.kr) 제품 상세 링크를 꼭 붙여 주세요.
+        제약사 · 약국 · 의료기기 회사의 요청이나 후원으로는 넣지 않아요.
+  - type: input
+    id: name
+    attributes:
+      label: 제품 이름
+      placeholder: 예) 어린이타이레놀현탁액
+    validations:
+      required: true
+  - type: input
+    id: nedrug
+    attributes:
+      label: 의약품안전나라 링크
+      placeholder: https://nedrug.mfds.go.kr/pbp/CCBBB01/getItemDetail?itemSeq=...
+    validations:
+      required: true
+  - type: textarea
+    id: label
+    attributes:
+      label: 원문 문구
+      description: 성분 · 함량(예 「100mL 중 아세트아미노펜 3200 밀리그램」), 용법의 하루 횟수 · 나이를 원문 그대로
+    validations:
+      required: true

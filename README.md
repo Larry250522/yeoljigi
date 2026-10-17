@@ -1,5 +1,7 @@
 # 열지기
 
+[![CI](https://github.com/yeoljigi/yeoljigi.github.io/actions/workflows/ci.yml/badge.svg)](https://github.com/yeoljigi/yeoljigi.github.io/actions/workflows/ci.yml)
+
 **주소: https://yeoljigi.github.io/** (GitHub Pages — main 에 push 하면 몇 분 뒤 바뀐다)
 
 아이가 열날 때 쓰는 기록장 웹앱(PWA). 체온 · 해열제 · 증상을 남기고, 계열마다 **마지막으로 먹인 때 · 24시간 횟수**를
@@ -39,8 +41,11 @@
 ```sh
 npm run serve      # http://127.0.0.1:8811
 npm test           # node --test (의존성 없음)
+npm run smoke      # 연기 시험 — headless Chrome 으로 모든 화면 · 창을 열어 스크립트 오류 확인
 npm run icons      # 아이콘 · 링크 미리보기 그림 다시 만들기 (Pillow)
 ```
+
+GitHub Actions(`.github/workflows/ci.yml`)가 main 과 PR 마다 문법 확인 · `npm test` · `npm run smoke` 를 돌린다. 함께 만들기는 [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 폴더 지도
 
@@ -56,7 +61,7 @@ npm run icons      # 아이콘 · 링크 미리보기 그림 다시 만들기 (P
 | 화면 도우미(시간 · 아래 창 · 토스트 · 아이콘) | `js/ui.js` |
 | 디자인 토큰 · 다크 모드 | `css/app.css` |
 | 아이콘 · 미리보기 그림 | `icons/`, `scripts/make_icons.py` |
-| 시험 | `tests/` |
+| 시험 · 연기 시험 · CI | `tests/`, `scripts/smoke.mjs`, `.github/workflows/ci.yml` |
 
 ## 알아 둘 것
 

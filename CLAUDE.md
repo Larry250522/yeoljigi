@@ -4,7 +4,8 @@
 
 ## 정한 것 (2026-10-11)
 
-- **웹앱(PWA) · 빌드 없음** — 바닐라 ES 모듈, 정적 파일만. `npm run serve` 로 켜고 `npm test` 로 시험(node --test, 의존성 없음).
+- **웹앱(PWA) · 빌드 없음** — 바닐라 ES 모듈, 정적 파일만. `npm run serve` 로 켜고 `npm test` 로 시험(node --test, 의존성 없음),
+  `npm run smoke` 로 연기 시험(headless Chrome · CDP 직접). CI(`.github/workflows/ci.yml`)가 main · PR 마다 둘 다 돌린다.
 - **기록은 이 기기에만** (localStorage `yeoljigi.v1`). 서버 · 로그인 없음. 가족 공유는 다음 단계 — 그때 서버를 고른다.
 - **카카오톡 안 브라우저**에서 열리면 기본 브라우저로 넘긴다(`js/env.js`). 거기서는 홈 화면 추가가 안 되고 기록이 따로 논다.
 - 「열나요」를 참고하되 **이름 · 그림 · 문구는 따라 하지 않는다.**

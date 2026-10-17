@@ -8,6 +8,7 @@
   "scripts": {
     "test": "TZ=Asia/Seoul node --test tests/*.test.mjs",
     "serve": "python3 -m http.server 8811 --bind 127.0.0.1",
-    "icons": "python3 scripts/make_icons.py"
+    "icons": "python3 scripts/make_icons.py",
+    "smoke": "node scripts/smoke.mjs"
   }
 }

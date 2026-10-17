@@ -1,0 +1,35 @@
+# 시험 · 연기 시험 — main 에 올릴 때와 PR 마다. 의존성 없음(npm install 없이 Node 와 러너의 Chrome 만).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: 시험 (npm test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: 문법 확인
+        run: for f in js/*.js sw.js scripts/*.mjs; do node --check "$f"; done
+      - run: npm test
+
+  smoke:
+    name: 연기 시험 (headless Chrome)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm run smoke
+        env:
+          CHROME: google-chrome
