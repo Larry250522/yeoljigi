@@ -1,8 +1,8 @@
 // 열지기 — 화면 넷(홈 · 기록 · 용량 · 설정)과 처음 쓰는 사람 맞이.
 
 import {
-  GROUPS, INGREDIENTS, URINE_TAG, ageLabel, ageMonths, ageNotice, alertsFor, careTip,
-  feverEpisode, feverLevel, groupLog, lastUrine, tempTrend,
+  GROUPS, INGREDIENTS, URINE_TAG, WATER_TAG, ageLabel, ageMonths, ageNotice, alertsFor, careTip,
+  feverEpisode, feverLevel, groupLog, lastTagged, tempTrend,
 } from './dose.js';
 import { chartImage, tempChart } from './chart.js';
 import * as notify from './notify.js';
@@ -10,9 +10,11 @@ import { summary } from './report.js';
 import {
   childSheet, editEntry, medPresetSheet, medSheet, symptomSheet, tempSheet,
 } from './sheets.js';
+import * as share from './share.js';
 import * as store from './store.js';
 import {
-  $, $$, ago, clock, confirmSheet, dayLabel, elapsed, esc, fmt1, fmtAmount, icon, shareFile, sheet, toast,
+  $, $$, ago, choiceSheet, clock, closeSheet, confirmSheet, dayLabel, elapsed, esc, fmt1, fmtAmount, icon, shareFile, shareText, sheet,
+  toast,
 } from './ui.js';
 import * as env from './env.js';
 
@@ -123,7 +125,8 @@ function homeView() {
   const notice = months !== null && months < 3
     ? `<p class="small" style="margin:10px 0 0;color:var(--high)">${esc(ageNotice('acetaminophen', months))}</p>` : '';
 
-  const pee = lastUrine(history, now);
+  const pee = lastTagged(history, URINE_TAG, now);
+  const drink = lastTagged(history, WATER_TAG, now);
   const recent = history.slice(0, 5);
   const inner = `${banners()}${kidsBar(child)}${alertHtml}
     <section class="card" aria-label="지금 체온"><h2>${esc(child.name)} 지금<span class="spacer"></span>
@@ -134,6 +137,8 @@ function homeView() {
       <button type="button" data-new="symptom"><span class="ico bg-info">${icon('note')}</span>증상</button>
       <button type="button" data-pee><span class="ico bg-mild">${icon('drop')}</span>소변${pee
         ? `<small class="faint">${esc(ago(pee.at, now))}</small>` : ''}</button>
+      <button type="button" data-water><span class="ico bg-ok">${icon('cup')}</span>물${drink
+        ? `<small class="faint">${esc(ago(drink.at, now))}</small>` : ''}</button>
     </div>
     <section class="card" aria-label="해열제 기록"><h2>해열제 기록<span class="spacer"></span>
       <button class="link" data-help-dose>간격 안내</button></h2>
@@ -173,7 +178,10 @@ function rowHtml(e, withDay = false) {
     what = `<b>${esc(e.name || ing?.name || '해열제')}</b> <span class="num">${esc(fmtAmount(e.amount))}${esc(e.unit || 'mL')}</span>`;
     sub = [`${ing?.name || ''} ${e.mg}mg`, e.memo].filter(Boolean).join(' · ');
   } else {
-    ico = `<span class="ico bg-info">${icon('note')}</span>`;
+    // 홈에서 한 번 눌러 남긴 소변 · 물은 그 단추의 그림으로
+    const tags = e.tags || [];
+    const one = tags.length === 1 && tags[0] === URINE_TAG ? ['mild', 'drop'] : tags.length === 1 && tags[0] === WATER_TAG ? ['ok', 'cup'] : null;
+    ico = one ? `<span class="ico bg-${one[0]}">${icon(one[1])}</span>` : `<span class="ico bg-info">${icon('note')}</span>`;
     what = `<b>${esc((e.tags || []).join(', ') || '메모')}</b>`;
     sub = e.memo || '';
   }
@@ -294,13 +302,22 @@ function settingsView() {
     <div class="section-title">화면</div><div class="list">
       <div class="item"><span class="grow"><b>테마</b></span><span class="seg" role="group" aria-label="테마">
         ${[['system', '자동'], ['light', '밝게'], ['dark', '어둡게']].map(([k, l]) => `<button type="button" data-theme-set="${k}"
-          aria-pressed="${s.settings.theme === k}">${l}</button>`).join('')}</span></div></div>
+          aria-pressed="${s.settings.theme === k}">${l}</button>`).join('')}</span></div>
+      <div class="item"><span class="grow"><b>글자 크기</b></span><span class="seg" role="group" aria-label="글자 크기">
+        ${Object.entries(store.TEXT_SIZES).map(([k, l]) => `<button type="button" data-text-set="${k}"
+          aria-pressed="${s.settings.text === k}">${l}</button>`).join('')}</span></div></div>
+
+    <div class="section-title">가족과 나누기</div><div class="list">
+      <button type="button" class="item" data-send-link>${icon('share', 20)}<span class="grow"><b>기록 링크 보내기</b>
+        <small>가족 휴대폰의 열지기에 최근 기록을 합쳐요</small></span>${icon('chev', 18)}</button>
+      <button type="button" class="item" data-paste-link>${icon('copy', 20)}<span class="grow"><b>받은 기록 링크 붙여 넣기</b>
+        <small>홈 화면 앱(아이폰)에서 링크가 브라우저로 열릴 때</small></span>${icon('chev', 18)}</button></div>
 
     <div class="section-title">기록 보관</div><div class="list">
       <button type="button" class="item" data-export>${icon('download', 20)}<span class="grow"><b>백업 파일 저장</b>
         <small>휴대폰을 바꾸거나 다른 브라우저로 옮길 때</small></span></button>
       <label class="item" style="cursor:pointer">${icon('upload', 20)}<span class="grow"><b>백업 파일 불러오기</b>
-        <small>지금 기록을 파일의 것으로 바꿔요</small></span>
+        <small>지금 기록에 합치거나, 파일의 것으로 바꿔요</small></span>
         <input type="file" accept="application/json,.json" data-import class="sr"></label>
       <button type="button" class="item" data-reset style="color:var(--high)">${icon('trash', 20)}<span class="grow"><b>모든 기록 지우기</b></span></button></div>
 
@@ -394,6 +411,10 @@ function helpAbout() {
     <h3>기록은 어디에?</h3>
     <p>이 휴대폰의 브라우저에만 저장돼요. 어디로도 보내지 않아요. 그래서 브라우저 기록을 지우거나 휴대폰을 바꾸면 사라질 수 있어요 —
       가끔 설정 → <b>백업 파일 저장</b>을 해 두세요.</p>
+    <h3>가족과 같이 보려면</h3>
+    <p>설정 → <b>기록 링크 보내기</b>로 최근 3일 기록을 링크에 담아 카카오톡 등으로 보내요. 받은 사람이 열고 「합치기」를 누르면
+      그 휴대폰 기록에 더해져요. 서로 보내면 두 휴대폰이 같아져요. 링크는 서버를 거치지 않지만 보낸 대화방에는 남아요 — 가족에게만
+      보내세요.</p>
     <h3>의료 정보가 아니에요</h3>
     <p>이 앱은 진단이나 처방을 하지 않아요. 용량 · 간격은 포장 설명서의 일반적인 내용이며, 손에 든 약의 설명서와 의사 · 약사의
       지시가 먼저입니다.</p>
@@ -412,7 +433,8 @@ async function shareSummary() {
   const el = sheet({
     title: '진료용 요약',
     body: `<p class="muted small" style="margin:0 0 10px">최근 72시간 기록이에요. 병원에서 보여 주거나 가족에게 보내세요.</p>
-      <textarea class="input" readonly style="height:260px;font-size:14px" aria-label="요약">${esc(text)}</textarea>`,
+      <textarea class="input" readonly style="height:260px;font-size:calc(14px * var(--fs))" aria-label="요약">${esc(text)}</textarea>
+      <button class="link" data-send-link style="margin-top:10px">${icon('share', 16)} 가족 휴대폰과 기록 합치기 — 기록 링크 보내기</button>`,
     footer: `<button class="btn" data-copy>${icon('copy', 20)} 복사</button>
       <button class="btn" data-png>${icon('image', 20)} 그래프</button>
       ${navigator.share ? `<button class="btn primary" data-send>${icon('share', 20)} 보내기</button>` : ''}`,
@@ -483,9 +505,11 @@ function go(next) {
 }
 
 function applyTheme() {
-  const t = store.get().settings.theme;
-  if (t === 'system') document.documentElement.removeAttribute('data-theme');
-  else document.documentElement.setAttribute('data-theme', t);
+  const { theme, text } = store.get().settings;
+  if (theme === 'system') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', theme);
+  if (text === 'md') document.documentElement.removeAttribute('data-text');
+  else document.documentElement.setAttribute('data-text', text);
 }
 
 function withChild(fn) {
@@ -510,6 +534,12 @@ root.addEventListener('click', async (ev) => {
       store.saveEntry({ id, childId: child.id, type: 'symptom', tags: [URINE_TAG], memo: '', at: new Date().toISOString() });
       toast('소변 기록했어요.', { label: '되돌리기', run: () => store.removeEntry(id) });
     });
+  } else if ('water' in d) {
+    withChild((child) => {
+      const id = store.uid();
+      store.saveEntry({ id, childId: child.id, type: 'symptom', tags: [WATER_TAG], memo: '', at: new Date().toISOString() });
+      toast('물 마신 것을 기록했어요.', { label: '되돌리기', run: () => store.removeEntry(id) });
+    });
   } else if (d.new) {
     withChild((child) => {
       if (d.new === 'temp') tempSheet(child);
@@ -532,6 +562,9 @@ root.addEventListener('click', async (ev) => {
   else if (d.editMed) medPresetSheet(store.get().meds.find((m) => m.id === d.editMed));
   else if ('addMed' in d) medPresetSheet();
   else if (d.themeSet) { store.setSetting('theme', d.themeSet); applyTheme(); }
+  else if (d.textSet) { store.setSetting('text', d.textSet); applyTheme(); }
+  else if ('sendLink' in d) sendLinkSheet();
+  else if ('pasteLink' in d) pasteLinkSheet();
   else if ('export' in d) exportBackup();
   else if ('reset' in d) {
     const ok = await confirmSheet({ title: '모든 기록 지우기', danger: true, ok: '모두 지우기',
@@ -553,19 +586,100 @@ root.addEventListener('change', async (ev) => {
   } else if (t.matches('[data-import]')) {
     const file = t.files[0];
     if (!file) return;
-    const ok = await confirmSheet({ title: '백업 불러오기', ok: '바꾸기', danger: true,
-      text: `「${file.name}」의 기록으로 지금 기록을 바꿔요. 지금 기록은 사라져요.` });
-    if (!ok) { t.value = ''; return; }
+    // 옛 주소에서 받은 백업을 새 주소에서 이미 쓰던 기록에 불러오는 일이 많다 — 합치기가 먼저
+    const how = store.get().children.length ? await choiceSheet({ title: '백업 불러오기',
+      text: `「${file.name}」의 기록을 어떻게 할까요? 합치면 지금 기록은 그대로 두고 없던 기록만 더해요. 바꾸면 지금 기록은 사라져요.`,
+      choices: [{ key: 'replace', label: '바꾸기', kind: 'danger' }, { key: 'merge', label: '합치기', kind: 'primary' }] }) : 'replace';
+    t.value = '';                           // 같은 파일을 다시 골라도 change 가 오게
+    if (!how) return;
     try {
-      const r = store.importJson(await file.text());
-      applyTheme();
-      toast(`아이 ${r.children}명 · 기록 ${r.entries}건을 불러왔어요.`);
+      const text = await file.text();
+      if (how === 'merge') toast(mergedText(store.mergeJson(text)));
+      else {
+        const r = store.importJson(text);
+        applyTheme();
+        toast(`아이 ${r.children}명 · 기록 ${r.entries}건을 불러왔어요.`);
+      }
     } catch {
-      t.value = '';                         // 같은 파일을 다시 골라도 change 가 오게
       toast('열지기 백업 파일이 아니거나 깨졌어요.');
     }
   }
 });
+
+function mergedText(r) {
+  const parts = [`기록 ${r.entries}건을 더했어요`];
+  if (r.children) parts.push(`아이 ${r.children}명`);
+  if (r.updated) parts.push(`고친 기록 ${r.updated}건`);
+  if (r.removed) parts.push(`지운 기록 ${r.removed}건 뺌`);
+  return r.entries || r.updated || r.removed || r.children ? `${parts.join(' · ')}.` : '새로 더할 기록이 없어요. 이미 같아요.';
+}
+
+// ── 가족과 나누기(기록 링크, js/share.js) ─────────
+const appUrl = () => `${location.origin}${location.pathname}`;
+
+function sendLinkSheet() {
+  const child = store.activeChild();
+  if (!child) { childSheet(null, { first: true }); return; }
+  const el = sheet({ title: '기록 링크 보내기', body: `<div class="prose">
+      <p><b>${esc(child.name)}</b>의 최근 3일 기록(체온 · 해열제 · 증상)을 링크에 담아요. 가족이 링크를 열고 「합치기」를 누르면
+        그 휴대폰의 열지기에 더해져요 — 그쪽 기록은 지우지 않아요.</p>
+      <ul><li>서로 한 번씩 보내면 두 휴대폰의 기록이 같아져요.</li>
+        <li>링크는 서버를 거치지 않지만, 보낸 대화방에는 남아요. <b>가족에게만</b> 보내세요.</li>
+        <li>약을 먹였다면 기록하고 바로 보내 주세요 — 다른 보호자가 또 먹이지 않게.</li></ul></div>`,
+    footer: `<button class="btn primary" data-go-send>${icon('share', 20)} 링크 보내기</button>` });
+  $('[data-go-send]', el).addEventListener('click', async () => {
+    let link;
+    let hours;
+    // 메신저에 붙이기 좋은 길이로 — 기록이 많으면 기간을 줄인다
+    for (hours of [72, 24, 12]) {
+      link = await share.linkFor(store.sharePack(child.id, hours), appUrl());
+      if (link.length <= share.MAX_LINK) break;
+    }
+    closeSheet();
+    await shareText(`[${child.name}] 열지기 기록 ${hours === 72 ? '3일' : `${hours}시간`}치예요. 열고 「합치기」를 눌러 주세요.\n${link}`);
+  });
+}
+
+function pasteLinkSheet() {
+  const el = sheet({ title: '받은 기록 링크 붙여 넣기', body: `<p class="muted small" style="margin:0 0 10px">카카오톡 등에서 받은 글을
+      통째로 복사해 붙여 넣으세요. 아이폰의 홈 화면 앱은 브라우저와 기록이 따로라, 링크를 누르면 브라우저 쪽에 합쳐져요.</p>
+      <textarea class="input" name="link" style="height:140px" aria-label="받은 글" placeholder="https://yeoljigi.github.io/#share=…"></textarea>`,
+    footer: `<button class="btn primary" data-go-paste>읽기</button>` });
+  $('[data-go-paste]', el).addEventListener('click', () => {
+    const m = /#share=([A-Za-z0-9_-]+)/.exec($('[name=link]', el).value);
+    if (!m) { toast('기록 링크를 찾지 못했어요. 글을 통째로 붙여 넣어 주세요.'); return; }
+    closeSheet(true);
+    receiveShare(m[1]);
+  });
+}
+
+/** 받은 기록 링크 — 무엇이 들었는지 보이고 합칠지 묻는다. */
+async function receiveShare(code) {
+  let raw;
+  let data;
+  try {
+    raw = await share.decode(code);
+    data = store.readBackup(raw);
+  } catch {
+    toast('기록 링크를 읽지 못했어요. 링크가 잘렸을 수 있어요.');
+    return;
+  }
+  const kid = data.children[0];
+  const n = (type) => data.entries.filter((e) => e.type === type).length;
+  const sent = raw.sentAt ? `${dayLabel(raw.sentAt).replace(/ · .*/, '')} ${clock(raw.sentAt)}에 보낸 ` : '';
+  const ios = env.iosNotInstalled() ? ' 홈 화면의 열지기에 합치려면 이 글을 닫고, 링크를 복사해 열지기 → 설정 → 「받은 기록 링크 붙여 넣기」로 넣으세요.' : '';
+  const ok = await confirmSheet({ title: '가족이 보낸 기록', ok: '합치기',
+    text: `${sent}${kid.name}의 기록이에요 — 체온 ${n('temp')} · 해열제 ${n('med')} · 증상 ${n('symptom')}건. 이 휴대폰 기록에 더해요. 지금 기록은 지우지 않아요.${ios}` });
+  if (!ok) return;
+  try {
+    const r = store.mergeData(raw);
+    if (r.kids[0]) store.setActive(r.kids[0]);
+    toast(mergedText(r));
+    go('home');
+  } catch {
+    toast('기록을 합치지 못했어요.');
+  }
+}
 
 function exportBackup() {
   const blob = new Blob([store.exportJson()], { type: 'application/json' });
@@ -586,6 +700,16 @@ store.subscribe(() => { render(); notify.reschedule(); });
 env.init(render);
 render();
 notify.reschedule();
+// 가족이 보낸 기록 링크로 열었으면 — 카카오톡 안 브라우저에서는 받지 않는다(기본 브라우저로 넘긴 뒤 거기서 받는다).
+// 이미 열린 창에서 링크를 누르면 다시 읽지 않고 # 만 바뀐다 — hashchange 도 본다.
+function checkShareLink() {
+  const shared = share.fromHash(location.hash);
+  if (!shared || env.inKakao()) return;
+  history.replaceState(null, '', `${location.pathname}${location.search}`);
+  receiveShare(shared);
+}
+checkShareLink();
+window.addEventListener('hashchange', checkShareLink);
 setInterval(() => { if (view === 'home' && !document.querySelector('.sheet')) render(); }, 30_000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); notify.reschedule(); } });
 

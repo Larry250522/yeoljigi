@@ -1,7 +1,7 @@
 // 진료용 요약 — 병원에서 의사에게 보여 주거나 카카오톡으로 보낼 글. 최근 72시간.
 
 import {
-  DAY, GROUPS, HOUR, INGREDIENTS, URINE_TAG, ageLabel, ageMonths, feverEpisode, groupLog, lastUrine,
+  DAY, GROUPS, HOUR, INGREDIENTS, ONE_TAP_TAGS, URINE_TAG, WATER_TAG, ageLabel, ageMonths, feverEpisode, groupLog, lastUrine,
 } from './dose.js';
 import { WELLBEING } from './store.js';
 import { clock, fmt1, fmtAmount } from './ui.js';
@@ -11,10 +11,12 @@ export function summary(child, entries, now = new Date(), hours = 72) {
   const recent = entries.filter((e) => new Date(e.at).getTime() >= from).sort((a, b) => (a.at < b.at ? -1 : 1));
   const temps = recent.filter((e) => e.type === 'temp');
   const meds = recent.filter((e) => e.type === 'med');
-  // 「소변 봄」만 있는 기록은 증상 목록 대신 한 줄로 센다
-  const peeOnly = (e) => e.type === 'symptom' && (e.tags || []).length === 1 && e.tags[0] === URINE_TAG && !e.memo;
-  const pees = recent.filter((e) => e.type === 'symptom' && (e.tags || []).includes(URINE_TAG));
-  const symptoms = recent.filter((e) => e.type === 'symptom' && !peeOnly(e));
+  // 「소변 봄」 · 「물 마심」만 있는 기록은 증상 목록 대신 한 줄로 센다
+  const oneTap = (e) => e.type === 'symptom' && (e.tags || []).length > 0 && e.tags.every((t) => ONE_TAP_TAGS.includes(t)) && !e.memo;
+  const tagged = (tag) => recent.filter((e) => e.type === 'symptom' && (e.tags || []).includes(tag));
+  const pees = tagged(URINE_TAG);
+  const drinks = tagged(WATER_TAG);
+  const symptoms = recent.filter((e) => e.type === 'symptom' && !oneTap(e));
   const lines = [];
   const age = ageLabel(ageMonths(child.birth, now));
   const wb = (e) => WELLBEING[Number(e.wellbeing) - 1] || '';
@@ -31,6 +33,7 @@ export function summary(child, entries, now = new Date(), hours = 72) {
     lines.push('체온 기록 없음');
   }
   if (pees.length) lines.push(`소변 ${pees.length}번 · 마지막 ${stamp(pees[pees.length - 1].at)}`);
+  if (drinks.length) lines.push(`물 마심 ${drinks.length}번 · 마지막 ${stamp(drinks[drinks.length - 1].at)}`);
 
   if (meds.length) {
     lines.push('', `해열제 ${meds.length}번`);

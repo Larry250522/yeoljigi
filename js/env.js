@@ -3,7 +3,7 @@
 // 카카오톡으로 받은 링크는 카카오톡 안 브라우저로 열린다. 거기서는 홈 화면에 추가할 수 없고, 저장한 기록이
 // 기본 브라우저와 따로 놀아 「어제 적은 게 없다」가 된다. 그래서 첫 화면에서 기본 브라우저로 넘긴다.
 
-export const VERSION = '0.7.1';
+export const VERSION = '0.8.0';
 
 const ua = () => (globalThis.navigator?.userAgent || '');
 
@@ -43,6 +43,6 @@ export async function install() {
 }
 
 export function openExternal() {
-  const url = location.href.split('#')[0];
+  const url = location.href;                 // # 뒤(기록 링크)까지 — 기본 브라우저에서 합치기를 묻게
   location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(url)}`;
 }

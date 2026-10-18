@@ -290,12 +290,20 @@ export const FEVER_LONG_H = 120;
 export const URINE_TAG = '소변 봄';
 export const URINE_GAP_H = 8;
 
-/** 마지막 소변 기록(지금까지). 없으면 null. */
-export function lastUrine(history, now = new Date()) {
+// 물 · 우유 등을 마심 — 홈에서 한 번 눌러 남긴다. 양은 재지 않는다(메모에 적을 수 있다). 진료 때 「얼마나 마셨나」를 함께 보이려고.
+export const WATER_TAG = '물 마심';
+// 홈에서 한 번 눌러 남기는 표 — 이것만 있는 기록은 진료용 요약에서 증상 목록 대신 한 줄로 센다
+export const ONE_TAP_TAGS = [URINE_TAG, WATER_TAG];
+
+/** 그 표가 붙은 마지막 기록(지금까지). 없으면 null. */
+export function lastTagged(history, tag, now = new Date()) {
   const nowMs = ms(now);
-  return history.filter((e) => e.type === 'symptom' && (e.tags || []).includes(URINE_TAG) && ms(e.at) <= nowMs)
+  return history.filter((e) => e.type === 'symptom' && (e.tags || []).includes(tag) && ms(e.at) <= nowMs)
     .sort((a, b) => ms(b.at) - ms(a.at))[0] || null;
 }
+
+/** 마지막 소변 기록(지금까지). 없으면 null. */
+export const lastUrine = (history, now = new Date()) => lastTagged(history, URINE_TAG, now);
 
 /**
  * 마지막 체온이 바로 앞 체온보다 얼마나 바뀌었나 · 24시간 최고.

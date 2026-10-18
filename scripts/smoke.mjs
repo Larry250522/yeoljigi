@@ -1,9 +1,10 @@
 // 연기 시험 — 진짜 Chrome(headless)으로 화면 넷 · 기록 창 · 도움말 창을 모두 열어 보고, 스크립트 오류가 하나라도 나면 실패.
 // 의존성 없음: Node 의 http 서버 + 내장 WebSocket 으로 Chrome DevTools Protocol 을 직접 부른다.
 //   npm run smoke            (CHROME=크롬 실행 파일 경로 로 바꿀 수 있다)
+//   SHOTS=폴더 npm run smoke  홈 · 설정을 밝게/어둡게 · 글자 크기마다 찍어 둔다(390px 화면 확인용)
 
 import { spawn } from 'node:child_process';
-import { readFile, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
@@ -52,6 +53,12 @@ const open = async (path = '') => {
   const r = await send('Page.navigate', { url: base + path });
   if (r.errorText) errors.push(`열기 실패 ${base + path}: ${r.errorText}`);
   await wait(900);
+};
+const shot = async (name) => {
+  if (!process.env.SHOTS) return;
+  await mkdir(process.env.SHOTS, { recursive: true });
+  const { data } = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+  await writeFile(join(process.env.SHOTS, `${name}.png`), Buffer.from(data, 'base64'));
 };
 const click = async (selector, label = selector) => {
   const ok = await evaluate(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (el) el.click(); return Boolean(el); })()`);
@@ -104,9 +111,10 @@ try {
     await click(`[data-view=${view}]`, `탭 ${view}`);
   }
   const sheets = [
-    ['', '[data-new=temp]'], ['', '[data-new=med]'], ['', '[data-new=symptom]'], ['', '[data-pee]'], ['', '[data-entry]'],
+    ['', '[data-new=temp]'], ['', '[data-new=med]'], ['', '[data-new=symptom]'], ['', '[data-pee]'], ['', '[data-water]'], ['', '[data-entry]'],
     ['', '[data-help-er]'], ['', '[data-help-dose]'], ['', '[data-help-fever]'],
     ['settings', '[data-help-about]'], ['settings', '[data-add-med]'], ['settings', '[data-edit-med]'], ['settings', '[data-add-kid]'],
+    ['settings', '[data-send-link]'], ['settings', '[data-paste-link]'], ['settings', '[data-text-set=xl]'], ['settings', '[data-text-set=md]'],
   ];
   for (const [view, selector] of sheets) {
     await open();
@@ -116,6 +124,35 @@ try {
   await open();
   await click('[data-view=calc]');
   for (let i = 0; i < 3; i += 1) await click(`[data-calc-med]:nth-of-type(${i + 1})`, `약 안내 ${i + 1}번째 약`);
+
+  if (process.env.SHOTS) {
+    for (const theme of ['light', 'dark']) {
+      for (const text of ['md', 'xl']) {
+        await evaluate(`(async () => { const s = await import('./js/store.js'); s.setSetting('theme', '${theme}'); s.setSetting('text', '${text}'); })()`);
+        for (const view of ['home', 'settings']) {
+          await open();
+          await click(`[data-view=${view}]`);
+          await shot(`${view}-${theme}-${text}`);
+        }
+      }
+    }
+    await evaluate(`(async () => { const s = await import('./js/store.js'); s.setSetting('theme', 'light'); s.setSetting('text', 'md'); })()`);
+  }
+
+  // 기록 링크 — 만들어 지운 뒤 그 링크로 열면 「가족이 보낸 기록」을 묻고, 합치면 돌아온다
+  const link = await evaluate(`(async () => { const s = await import('./js/store.js'); const sh = await import('./js/share.js');
+    const kid = s.get().children[0]; const link = await sh.linkFor(s.sharePack(kid.id), location.href);
+    s.get().entries.filter((e) => e.type === 'temp').forEach((e) => s.removeEntry(e.id));
+    s.get().removed = {}; s.saveEntry({ id: 'smoke', childId: kid.id, type: 'symptom', tags: [], memo: '', at: new Date().toISOString() });
+    return link; })()`);
+  await open(link.slice(base.length));
+  await wait(400);
+  if (!(await evaluate(`document.querySelector('.sheet h3')?.textContent === '가족이 보낸 기록'`))) errors.push('기록 링크로 열었는데 합치기를 묻지 않음');
+  await shot('share-receive');
+  await click('.sheet [data-yes]', '합치기 단추');
+  const temps = await evaluate(`(async () => (await import('./js/store.js')).get().entries.filter((e) => e.type === 'temp').length)()`);
+  if (temps !== 1) errors.push(`합친 뒤 체온 기록 ${temps}건(1건이어야)`);
+  if (await evaluate(`location.hash !== ''`)) errors.push('합친 뒤에도 주소에 기록 링크가 남음');
 } catch (err) {
   errors.push(String(err && err.message || err));
 } finally {
@@ -130,5 +167,5 @@ if (failed) {
   console.error(`연기 시험 실패 — ${errors.length}건\n${errors.map((e) => `- ${e}`).join('\n')}`);
   process.exit(1);
 }
-console.log('연기 시험 통과 — 화면 넷 · 기록 창 · 도움말 창에서 스크립트 오류 없음');
+console.log('연기 시험 통과 — 화면 넷 · 기록 창 · 도움말 창 · 기록 링크 합치기에서 스크립트 오류 없음');
 process.exit(0);

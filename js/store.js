@@ -1,9 +1,12 @@
 // 기록 저장 — 이 기기(브라우저)에만. 서버로 보내지 않는다.
 //
 // 한 덩어리 JSON 을 localStorage 에 둔다(기록이 수천 건이어도 수백 KB). 저장할 수 없는 환경(사생활 보호 창 ·
-// 꽉 찬 저장 공간)이면 화면에 알리고 메모리로만 돈다. 백업은 JSON 파일로 내보내고 다시 가져온다.
+// 꽉 찬 저장 공간)이면 화면에 알리고 메모리로만 돈다. 백업은 JSON 파일로 내보내고 다시 가져온다(바꾸기 · 합치기).
+//
+// 합치기 — 다른 휴대폰 · 옛 주소의 기록을 지금 기록에 더한다. 같은 기록(id)은 나중에 고친 쪽, 지운 기록은
+// `removed`(지운 기록 id → 지운 때)로 기억해 합칠 때 되살아나지 않게 한다.
 
-import { INGREDIENTS, URINE_TAG } from './dose.js';
+import { INGREDIENTS, URINE_TAG, WATER_TAG } from './dose.js';
 
 const KEY = 'yeoljigi.v1';
 export const SCHEMA = 1;
@@ -30,11 +33,16 @@ export const WELLBEING = ['많이 힘들어함', '힘들어함', '보통', '괜�
 export const wellbeingLabel = (v) => WELLBEING[Number(v) - 1] || '';
 
 // 그 밖의 일 — 소변(홈에서 한 번 누르기와 같은 표), 열의 까닭을 짐작하는 일(예방접종 뒤 1~2일은 열이 날 수 있다)
-export const EVENTS = [URINE_TAG, '예방접종 맞음', '병원 다녀옴', '어린이집 · 유치원 쉼'];
+export const EVENTS = [URINE_TAG, WATER_TAG, '예방접종 맞음', '병원 다녀옴', '어린이집 · 유치원 쉼'];
+
+// 글자 크기 — 밤에 한 손으로 볼 때(css 의 --fs)
+export const TEXT_SIZES = { md: '보통', lg: '크게', xl: '아주 크게' };
+// 지운 기록 표시는 이만큼만 남긴다(오래된 것부터 버림)
+const REMOVED_MAX = 3000;
 
 function blank() {
-  return { schema: SCHEMA, children: [], meds: DEFAULT_MEDS.map((m) => ({ ...m })), entries: [],
-    settings: { activeChildId: null, theme: 'system', notify: false, site: '귀' } };
+  return { schema: SCHEMA, children: [], meds: DEFAULT_MEDS.map((m) => ({ ...m })), entries: [], removed: {},
+    settings: { activeChildId: null, theme: 'system', notify: false, site: '귀', text: 'md' } };
 }
 
 export const uid = (prefix = 'e') => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -115,6 +123,14 @@ function cleanEntry(e) {
   return null;
 }
 
+/** 지운 기록 표시 — id → 지운 때. 깨진 것은 버리고 최근 것만 남긴다. */
+function cleanRemoved(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+  const pairs = Object.entries(v).filter(([id, at]) => id && okTime(at)).map(([id, at]) => [str(id, 60), new Date(at).toISOString()]);
+  pairs.sort((a, b) => (a[1] < b[1] ? 1 : -1));
+  return Object.fromEntries(pairs.slice(0, REMOVED_MAX));
+}
+
 /** 가져온 · 저장된 자료를 지금 꼴로 맞춘다. 깨진 칸이 있는 기록은 버린다(화면이 멈추지 않게). */
 export function normalize(data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('자료 꼴이 아닙니다.');
@@ -127,10 +143,12 @@ export function normalize(data) {
     children,
     meds: Array.isArray(data.meds) && data.meds.length ? data.meds.map(cleanMed).filter(Boolean) : base.meds,
     entries: (Array.isArray(data.entries) ? data.entries : []).map(cleanEntry).filter((e) => e && ids.has(e.childId)),
+    removed: cleanRemoved(data.removed),
     settings: { ...base.settings, ...(data.settings && typeof data.settings === 'object' ? data.settings : {}) },
   };
   if (!['system', 'light', 'dark'].includes(out.settings.theme)) out.settings.theme = 'system';
   out.settings.notify = Boolean(out.settings.notify);
+  if (!TEXT_SIZES[out.settings.text]) out.settings.text = 'md';
   if (!out.children.some((c) => c.id === out.settings.activeChildId)) {
     out.settings.activeChildId = out.children[0] ? out.children[0].id : null;
   }
@@ -178,6 +196,8 @@ export function saveChild(child) {
 
 export function removeChild(childId) {
   state.children = state.children.filter((c) => c.id !== childId);
+  const at = new Date().toISOString();
+  state.entries.forEach((e) => { if (e.childId === childId) state.removed[e.id] = at; });
   state.entries = state.entries.filter((e) => e.childId !== childId);
   if (state.settings.activeChildId === childId) state.settings.activeChildId = state.children[0]?.id || null;
   save();
@@ -185,7 +205,7 @@ export function removeChild(childId) {
 
 export function saveEntry(entry) {
   const i = state.entries.findIndex((e) => e.id === entry.id);
-  if (i >= 0) state.entries[i] = { ...state.entries[i], ...entry };
+  if (i >= 0) state.entries[i] = { ...state.entries[i], ...entry, updatedAt: new Date().toISOString() };
   else state.entries.push({ ...entry, id: entry.id || uid(), createdAt: new Date().toISOString() });
   save();
 }
@@ -193,6 +213,7 @@ export function saveEntry(entry) {
 export function removeEntry(id) {
   const gone = state.entries.find((e) => e.id === id);
   state.entries = state.entries.filter((e) => e.id !== id);
+  if (gone) state.removed[id] = new Date().toISOString();
   save();
   return gone;
 }
@@ -200,6 +221,7 @@ export function removeEntry(id) {
 export function restoreEntry(entry) {
   if (entry && !state.entries.some((e) => e.id === entry.id)) {
     state.entries.push(entry);
+    delete state.removed[entry.id];
     save();
   }
 }
@@ -225,16 +247,104 @@ export function exportJson() {
   return JSON.stringify({ app: 'yeoljigi', exportedAt: new Date().toISOString(), ...state }, null, 2);
 }
 
-/** 백업 파일로 바꾼다 — 지금 기록을 지우고 파일의 것으로. */
-export function importJson(text) {
-  const raw = JSON.parse(text);
-  // 아무 JSON 이나 불러와 지금 기록을 지우지 않게 — 열지기 백업이고 아이가 있어야 바꾼다
+/** 열지기 백업 · 기록 링크인지 보고 읽는다. 아이가 없으면 받지 않는다. */
+export function readBackup(raw) {
+  // 아무 JSON 이나 불러와 지금 기록을 지우지 않게 — 열지기 백업이고 아이가 있어야 쓴다
   if (!raw || raw.app !== 'yeoljigi' || !Array.isArray(raw.children)) throw new Error('열지기 백업 파일이 아닙니다.');
   const data = normalize(raw);
   if (!data.children.length) throw new Error('백업에 아이가 없습니다.');
+  return data;
+}
+
+/** 백업 파일로 바꾼다 — 지금 기록을 지우고 파일의 것으로. */
+export function importJson(text) {
+  const data = readBackup(JSON.parse(text));
+  data.settings = { ...data.settings, text: state.settings.text };   // 글자 크기는 이 휴대폰의 것
   state = data;
   save();
   return { children: data.children.length, entries: data.entries.length };
+}
+
+// 같은 기록을 두 휴대폰에서 따로 남겼는지 — 같은 아이 · 같은 때(분) · 같은 값
+const sameKey = (e) => [e.childId, e.type, e.at.slice(0, 16), e.temp ?? '', e.ingredient ?? '', e.amount ?? '',
+  (e.tags || []).join(',')].join('|');
+const editedAt = (e) => e.updatedAt || e.createdAt || '';
+const sameMed = (a, b) => a.ingredient === b.ingredient && a.conc === b.conc && a.unit === b.unit && a.name === b.name;
+
+/**
+ * 다른 기록을 지금 기록에 합친다 — 아무것도 지우지 않고 더한다(다른 휴대폰에서 지운 기록만 빠진다).
+ * 아이는 id, 없으면 같은 이름(생년월일이 다르지 않을 때)으로 맞춘다. 설정은 이 휴대폰의 것 그대로.
+ */
+export function mergeData(raw) {
+  const data = readBackup(raw);
+  const r = { children: 0, entries: 0, updated: 0, removed: 0, kids: [] };
+  const kid = new Map();
+  for (const c of data.children) {
+    const mine = state.children.find((x) => x.id === c.id)
+      || state.children.find((x) => x.name === c.name && (!x.birth || !c.birth || x.birth === c.birth));
+    if (mine) {
+      kid.set(c.id, mine.id);
+      // 이 휴대폰에 없던 칸만 채운다(생년월일 · 몸무게)
+      if (!mine.birth && c.birth) mine.birth = c.birth;
+      if (!mine.weight && c.weight) mine.weight = c.weight;
+    } else {
+      state.children.push({ ...c });
+      kid.set(c.id, c.id);
+      r.children += 1;
+    }
+  }
+  r.kids = [...new Set(kid.values())];
+  const med = new Map();
+  // 약이 없는 자료면 normalize 가 기본 약을 채운다 — 여기서 지운 기본 약이 되살아나지 않게 보낸 약만 본다
+  for (const m of Array.isArray(raw.meds) && raw.meds.length ? data.meds : []) {
+    const mine = state.meds.find((x) => x.id === m.id) || state.meds.find((x) => sameMed(x, m));
+    if (mine) med.set(m.id, mine.id);
+    else { state.meds.push({ ...m }); med.set(m.id, m.id); }
+  }
+  for (const [id, at] of Object.entries(data.removed)) {
+    if (!state.removed[id] || state.removed[id] < at) state.removed[id] = at;
+  }
+  const byId = new Map(state.entries.map((e) => [e.id, e]));
+  const keys = new Set(state.entries.map(sameKey));
+  for (const e of data.entries) {
+    const next = { ...e, childId: kid.get(e.childId) };
+    if (next.medId && med.has(next.medId)) next.medId = med.get(next.medId);
+    if (state.removed[next.id]) continue;
+    const mine = byId.get(next.id);
+    if (mine) {
+      if (editedAt(next) > editedAt(mine)) { Object.assign(mine, next); r.updated += 1; }
+      continue;
+    }
+    if (keys.has(sameKey(next))) continue;
+    state.entries.push(next);
+    byId.set(next.id, next);
+    keys.add(sameKey(next));
+    r.entries += 1;
+  }
+  const before = state.entries.length;
+  state.entries = state.entries.filter((e) => !state.removed[e.id]);
+  r.removed = before - state.entries.length;
+  state.removed = cleanRemoved(state.removed);
+  if (!activeChild()) state.settings.activeChildId = state.children[0]?.id || null;
+  save();
+  return r;
+}
+
+export const mergeJson = (text) => mergeData(JSON.parse(text));
+
+/**
+ * 가족에게 보낼 기록 — 한 아이의 최근 기록과 그 기록이 쓴 약, 그 사이 지운 기록 표시. 링크에 담는다(js/share.js).
+ * 설정 · 다른 아이는 넣지 않는다.
+ */
+export function sharePack(childId, hours = 72, now = new Date()) {
+  const child = state.children.find((c) => c.id === childId);
+  if (!child) return null;
+  const from = new Date(now.getTime() - hours * 3600_000).toISOString();
+  const entries = state.entries.filter((e) => e.childId === childId && e.at >= from);
+  const medIds = new Set(entries.map((e) => e.medId).filter(Boolean));
+  const removed = Object.fromEntries(Object.entries(state.removed).filter(([, at]) => at >= from));
+  return { app: 'yeoljigi', kind: 'share', sentAt: now.toISOString(), hours, schema: SCHEMA, children: [child],
+    meds: state.meds.filter((m) => medIds.has(m.id)), entries, removed };
 }
 
 export function resetAll() {
