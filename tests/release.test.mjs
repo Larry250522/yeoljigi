@@ -19,7 +19,7 @@ test('서비스 워커가 캐시하는 파일이 모두 있다', async () => {
 
 // 0.7.0 — 먹일 양 · 다음 시각을 정해 주는 말을 화면 코드에 다시 들이지 않는다(CLAUDE.md 「안전」 · README 「계산하지 않는 이유」)
 test('판정 · 처방 말이 화면 코드에 없다', async () => {
-  const banned = ['권장량', '지금 가능', '다시 먹일 수 있', '부터 먹일 수', '먹일 수 있는 때', '남은 양', '그래도 기록', '괜찮아요'];
+  const banned = ['권장량', '지금 가능', '먹일 수 있', '부터 먹일 수', '남은 양', '그래도 기록', '괜찮아요'];
   for (const path of ['js/app.js', 'js/sheets.js', 'js/report.js', 'js/notify.js', 'js/dose.js', 'index.html', 'manifest.webmanifest']) {
     const text = (await read(path)).split('\n').filter((line) => !/^\s*(\/\/|\*|\/\*\*)/.test(line)).join('\n');
     for (const word of banned) assert.ok(!text.includes(word), `${path} 에 「${word}」`);

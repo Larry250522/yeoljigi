@@ -1,6 +1,6 @@
 {
   "name": "yeoljigi",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
   "license": "MIT",
   "description": "열지기 — 아이 열날 때 체온 · 해열제 · 증상 기록 PWA",
